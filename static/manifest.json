@@ -1,0 +1,10 @@
+{
+  "name": "OpenEar",
+  "short_name": "OpenEar",
+  "description": "Real-time speech-to-text captioning",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111827",
+  "theme_color": "#111827"
+}
