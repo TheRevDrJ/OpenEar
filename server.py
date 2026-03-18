@@ -13,6 +13,8 @@ The admin page (admin.html) controls capture start/stop and device selection via
 The client page (index.html) connects via WebSocket and renders incoming text.
 """
 
+VERSION = "0.3.0"
+
 import os
 import io
 import time
@@ -200,11 +202,11 @@ def audio_callback(indata: np.ndarray, frames: int, time_info, status):
 
     # Calculate RMS level for the visual meter on the admin page
     rms = float(np.sqrt(np.mean(indata ** 2)))
-    current_audio_level = min(rms * 3.0, 1.0)  # Scale up for visibility, cap at 1.0
+    current_audio_level = min(rms * 6.0, 1.0)  # Scale up for visibility, cap at 1.0
 
-    # Clipping detection — if any sample exceeds 95% of max amplitude,
-    # the signal is dangerously close to distortion
-    audio_clipping = float(np.max(np.abs(indata))) > 0.95
+    # Clipping detection — if any sample exceeds 70% of max amplitude,
+    # the input gain is too hot and risks distortion
+    audio_clipping = float(np.max(np.abs(indata))) > 0.70
 
     # Thread-safe append to the buffer that the transcription loop will drain
     with buffer_lock:
