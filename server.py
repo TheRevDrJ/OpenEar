@@ -10,6 +10,7 @@ import time
 import asyncio
 import logging
 import logging.handlers
+import socket
 import tempfile
 import threading
 import wave
@@ -84,27 +85,58 @@ audio_buffer: list[np.ndarray] = []
 buffer_lock = threading.Lock()
 capture_stream: sd.InputStream | None = None
 transcription_task: asyncio.Task | None = None
+current_audio_level: float = 0.0  # RMS level 0.0-1.0
+audio_clipping: bool = False
 
 
 def get_audio_devices() -> list[dict]:
-    """List available audio input devices."""
+    """List available audio input devices, filtering duplicates across APIs."""
     devices = sd.query_devices()
-    inputs = []
+    hostapis = sd.query_hostapis()
+
+    # Build a map of host API index -> name
+    api_names = {i: api["name"] for i, api in enumerate(hostapis)}
+
+    # Collect all input devices grouped by name
+    by_name: dict[str, list[dict]] = {}
     for i, d in enumerate(devices):
         if d["max_input_channels"] > 0:
-            inputs.append({
+            entry = {
                 "id": i,
                 "name": d["name"],
                 "channels": d["max_input_channels"],
                 "sample_rate": d["default_samplerate"],
-            })
+                "api": api_names.get(d["hostapi"], ""),
+            }
+            by_name.setdefault(d["name"], []).append(entry)
+
+    # For each unique device name, prefer WASAPI > DirectSound > MME
+    api_priority = {"Windows WASAPI": 0, "Windows DirectSound": 1, "MME": 2}
+    inputs = []
+    for name, entries in by_name.items():
+        entries.sort(key=lambda e: api_priority.get(e["api"], 99))
+        best = entries[0]
+        inputs.append({
+            "id": best["id"],
+            "name": best["name"],
+            "channels": best["channels"],
+            "sample_rate": best["sample_rate"],
+        })
+
     return inputs
 
 
 def audio_callback(indata: np.ndarray, frames: int, time_info, status):
-    """Called by sounddevice for each audio block. Accumulates into buffer."""
+    """Called by sounddevice for each audio block. Accumulates into buffer and tracks level."""
+    global current_audio_level, audio_clipping
     if status:
         logger.warning(f"Audio status: {status}")
+
+    # Track audio level (RMS)
+    rms = float(np.sqrt(np.mean(indata ** 2)))
+    current_audio_level = min(rms * 3.0, 1.0)  # Scale up for visibility, cap at 1.0
+    audio_clipping = float(np.max(np.abs(indata))) > 0.95
+
     with buffer_lock:
         audio_buffer.append(indata.copy())
 
@@ -189,7 +221,7 @@ async def transcription_loop():
         text = await loop.run_in_executor(None, transcribe_audio_chunk, chunk)
 
         if text:
-            logger.info(f"Transcribed: {text[:80]}...")
+            logger.info("Transcription sent to clients")
             await broadcast({"type": "transcript", "text": text})
 
 
@@ -278,6 +310,30 @@ async def api_status():
         "capturing": is_capturing,
         "device_id": selected_device_id,
         "clients": len(connected_clients),
+        "audio_level": round(current_audio_level, 3),
+        "clipping": audio_clipping,
+    }
+
+
+@app.get("/api/server-info")
+async def server_info():
+    hostname = socket.gethostname()
+    ip = "unknown"
+    try:
+        # Connect to a public IP (no data sent) to find the real LAN interface
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+    except Exception:
+        try:
+            ip = socket.gethostbyname(hostname)
+        except Exception:
+            pass
+    return {
+        "hostname": hostname,
+        "ip": ip,
+        "url": f"http://{hostname.lower()}.local",
+        "port": PORT,
     }
 
 
@@ -335,5 +391,16 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 if __name__ == "__main__":
     import uvicorn
+
+    # Suppress noisy access logs for high-frequency polling endpoints
+    class QuietAccessFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            if "/api/status" in msg or "/api/server-info" in msg:
+                return False
+            return True
+
+    logging.getLogger("uvicorn.access").addFilter(QuietAccessFilter())
+
     logger.info(f"Server running at http://0.0.0.0:{PORT}")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")

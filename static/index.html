@@ -284,6 +284,7 @@ const themeBtn = document.getElementById('theme-btn');
 let ws = null;
 let isCapturing = false;
 let reconnectTimeout = null;
+let autoScroll = true;
 
 // --- Font size ---
 let fontSize = parseInt(localStorage.getItem('openear-font-size') || '32');
@@ -374,6 +375,12 @@ function updateCaptureState() {
   }
 }
 
+// --- Auto-scroll: lock when user scrolls up, unlock when they reach the bottom ---
+transcriptArea.addEventListener('scroll', () => {
+  const atBottom = transcriptArea.scrollHeight - transcriptArea.scrollTop - transcriptArea.clientHeight < 50;
+  autoScroll = atBottom;
+});
+
 function appendText(text) {
   emptyState.classList.add('hidden');
   if (transcript.textContent.length > 0) transcript.appendChild(document.createTextNode(' '));
@@ -382,7 +389,7 @@ function appendText(text) {
   span.textContent = text;
   transcript.appendChild(span);
   setTimeout(() => span.classList.remove('chunk-new'), 350);
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
+  if (autoScroll) transcriptArea.scrollTop = transcriptArea.scrollHeight;
 }
 
 function clearTranscript() {

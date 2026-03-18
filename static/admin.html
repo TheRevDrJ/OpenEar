@@ -18,6 +18,7 @@
     --accent: #60a5fa;
     --danger: #f87171;
     --success: #4ade80;
+    --warning: #fbbf24;
     --surface: #1f2937;
     --surface-hover: #374151;
   }
@@ -36,11 +37,7 @@
     padding: 40px 24px;
   }
 
-  h1 {
-    font-size: 28px;
-    font-weight: 800;
-    margin-bottom: 8px;
-  }
+  h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
 
   .subtitle {
     color: var(--text-dim);
@@ -90,10 +87,7 @@
     background-position: right 16px center;
   }
 
-  select:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
+  select:focus { outline: none; border-color: var(--accent); }
 
   .toggle-container {
     display: flex;
@@ -101,33 +95,13 @@
     justify-content: space-between;
   }
 
-  .toggle-label {
-    font-size: 20px;
-    font-weight: 700;
-  }
+  .toggle-label { font-size: 20px; font-weight: 700; }
 
-  .toggle-status {
-    font-size: 14px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
+  .toggle-status { font-size: 14px; color: var(--text-dim); margin-top: 4px; }
+  .toggle-status.active { color: var(--success); }
 
-  .toggle-status.active {
-    color: var(--success);
-  }
-
-  .toggle {
-    position: relative;
-    width: 72px;
-    height: 40px;
-    flex-shrink: 0;
-  }
-
-  .toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
+  .toggle { position: relative; width: 72px; height: 40px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
 
   .toggle-track {
     position: absolute;
@@ -141,27 +115,16 @@
   .toggle-track::after {
     content: '';
     position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 32px;
-    height: 32px;
+    top: 4px; left: 4px;
+    width: 32px; height: 32px;
     background: var(--text);
     border-radius: 50%;
     transition: transform 0.3s;
   }
 
-  .toggle input:checked + .toggle-track {
-    background: var(--success);
-  }
-
-  .toggle input:checked + .toggle-track::after {
-    transform: translateX(32px);
-  }
-
-  .toggle input:disabled + .toggle-track {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  .toggle input:checked + .toggle-track { background: var(--success); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(32px); }
+  .toggle input:disabled + .toggle-track { opacity: 0.4; cursor: not-allowed; }
 
   .info-row {
     display: flex;
@@ -171,17 +134,11 @@
     font-size: 15px;
   }
 
-  .info-row:not(:last-child) {
-    border-bottom: 1px solid var(--surface-hover);
-  }
+  .info-row:not(:last-child) { border-bottom: 1px solid var(--surface-hover); }
 
-  .info-label {
-    color: var(--text-dim);
-  }
-
-  .info-value {
-    font-weight: 700;
-  }
+  .info-label { color: var(--text-dim); }
+  .info-value { font-weight: 700; }
+  .info-value.mono { font-family: monospace; font-size: 14px; }
 
   .error-msg {
     background: rgba(248, 113, 113, 0.15);
@@ -207,10 +164,7 @@
     margin-top: 12px;
   }
 
-  .refresh-btn:hover {
-    background: #4b5563;
-    color: var(--text);
-  }
+  .refresh-btn:hover { background: #4b5563; color: var(--text); }
 
   #server-down {
     display: none;
@@ -222,9 +176,7 @@
     text-align: center;
   }
 
-  #server-down.visible {
-    display: block;
-  }
+  #server-down.visible { display: block; }
 
   #server-down .down-text {
     font-size: 20px;
@@ -240,6 +192,74 @@
     color: var(--text-dim);
     margin-top: 6px;
   }
+
+  .meter-container { margin-top: 16px; }
+
+  .meter-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .meter-label span { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+
+  .clip-indicator {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--danger);
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .clip-indicator.active { opacity: 1; }
+
+  .meter-track {
+    height: 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    transition: width 0.15s ease-out, background 0.3s;
+    background: var(--success);
+  }
+
+  .meter-fill.warm { background: var(--warning); }
+  .meter-fill.hot { background: var(--danger); }
+
+  .qr-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #qr-code {
+    border-radius: 12px;
+    padding: 16px;
+    background: #ffffff;
+    display: inline-block;
+  }
+
+  .qr-url {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .qr-hint {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -253,6 +273,15 @@
   </div>
 
   <div class="card">
+    <h2>Share with Congregation</h2>
+    <div class="qr-section">
+      <div id="qr-code"></div>
+      <div class="qr-url" id="qr-url">Loading...</div>
+      <div class="qr-hint">Scan or visit this URL on any device on the WiFi</div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Audio Device</h2>
     <label for="device-select">Input source</label>
     <select id="device-select">
@@ -260,6 +289,16 @@
     </select>
     <button class="refresh-btn" onclick="loadDevices()">Refresh devices</button>
     <div id="error-msg" class="error-msg"></div>
+
+    <div class="meter-container" id="meter-container" style="display:none">
+      <div class="meter-label">
+        <span>Audio Level</span>
+        <span class="clip-indicator" id="clip-indicator">CLIPPING</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill" id="meter-fill"></div>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -285,9 +324,18 @@
       <span class="info-label">Selected device</span>
       <span class="info-value" id="device-name">None</span>
     </div>
+    <div class="info-row">
+      <span class="info-label">Server hostname</span>
+      <span class="info-value mono" id="server-hostname">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Server IP</span>
+      <span class="info-value mono" id="server-ip">—</span>
+    </div>
   </div>
 </div>
 
+<script src="/static/qrcode.min.js"></script>
 <script>
 const deviceSelect = document.getElementById('device-select');
 const captureToggle = document.getElementById('capture-toggle');
@@ -296,15 +344,45 @@ const clientCount = document.getElementById('client-count');
 const deviceName = document.getElementById('device-name');
 const errorMsg = document.getElementById('error-msg');
 const serverDown = document.getElementById('server-down');
+const meterContainer = document.getElementById('meter-container');
+const meterFill = document.getElementById('meter-fill');
+const clipIndicator = document.getElementById('clip-indicator');
+const serverHostname = document.getElementById('server-hostname');
+const serverIP = document.getElementById('server-ip');
+const qrUrlEl = document.getElementById('qr-url');
+const qrCodeEl = document.getElementById('qr-code');
 
 let devices = [];
-let statusPoll = null;
-let wasConnected = false;
+let qrGenerated = false;
 
 function showError(msg) {
   errorMsg.textContent = msg;
   errorMsg.style.display = 'block';
   setTimeout(() => { errorMsg.style.display = 'none'; }, 5000);
+}
+
+async function loadServerInfo() {
+  try {
+    const res = await fetch('/api/server-info');
+    const data = await res.json();
+    serverHostname.textContent = data.hostname;
+    serverIP.textContent = data.ip;
+    qrUrlEl.textContent = data.url;
+
+    if (!qrGenerated) {
+      new QRCode(qrCodeEl, {
+        text: data.url,
+        width: 200,
+        height: 200,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+      qrGenerated = true;
+    }
+  } catch (e) {
+    // Will retry
+  }
 }
 
 async function loadDevices() {
@@ -380,7 +458,6 @@ async function updateStatus() {
     const res = await fetch('/api/status');
     const data = await res.json();
 
-    wasConnected = true;
     serverDown.classList.remove('visible');
 
     captureToggle.checked = data.capturing;
@@ -395,6 +472,17 @@ async function updateStatus() {
     } else {
       deviceName.textContent = 'None';
     }
+
+    // Audio level meter
+    if (data.capturing) {
+      meterContainer.style.display = 'block';
+      const pct = Math.round(data.audio_level * 100);
+      meterFill.style.width = pct + '%';
+      meterFill.className = 'meter-fill' + (pct > 85 ? ' hot' : pct > 60 ? ' warm' : '');
+      clipIndicator.className = 'clip-indicator' + (data.clipping ? ' active' : '');
+    } else {
+      meterContainer.style.display = 'none';
+    }
   } catch (e) {
     serverDown.classList.add('visible');
     toggleStatus.textContent = 'Unknown';
@@ -404,8 +492,9 @@ async function updateStatus() {
 }
 
 // Init
+loadServerInfo();
 loadDevices().then(() => updateStatus());
-statusPoll = setInterval(updateStatus, 3000);
+setInterval(updateStatus, 500);
 </script>
 </body>
 </html>

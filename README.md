@@ -58,9 +58,9 @@ Open `http://<server-ip>:8620` on any device on the same network.
 | Version | Feature | Status |
 |---------|---------|--------|
 | v0.1 | Proof of concept — tablet mic, WebSocket, Whisper, text on screen | ✓ Done |
-| v0.2 | Server-side mic capture — soundboard audio, tablets become display-only | In Progress |
-| v0.3 | Real-time translation — language picker, local translation model | Planned |
-| v0.4 | UI polish — better client experience, settings, admin page | Planned |
+| v0.2 | Server-side mic capture — soundboard audio, tablets become display-only | ✓ Done |
+| v0.3 | UI polish — better client experience, settings, admin page | ✓ Done |
+| v0.4 | Real-time translation — language picker, local translation model | Planned |
 | v0.5 | Packaging — one-click installer, setup wizard, Mac Mini deployment | Planned |
 | v1.0 | Release — ready for any church | Planned |
 
