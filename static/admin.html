@@ -61,6 +61,31 @@
     color: var(--text-dim);
   }
 
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .card-header h2 { margin-bottom: 0; }
+
+  .collapse-btn {
+    background: var(--surface-hover);
+    color: var(--text-dim);
+    border: none;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .collapse-btn:hover { background: #4b5563; color: var(--text); }
+
   label {
     display: block;
     font-size: 14px;
@@ -273,8 +298,11 @@
   </div>
 
   <div class="card">
-    <h2>Share with Congregation</h2>
-    <div class="qr-section">
+    <div class="card-header">
+      <h2>Share with Congregation</h2>
+      <button class="collapse-btn" id="qr-toggle" onclick="toggleQR()">Hide</button>
+    </div>
+    <div class="qr-section" id="qr-section">
       <div id="qr-code"></div>
       <div class="qr-url" id="qr-url">Loading...</div>
       <div class="qr-hint">Scan or visit this URL on any device on the WiFi</div>
@@ -354,6 +382,14 @@ const qrCodeEl = document.getElementById('qr-code');
 
 let devices = [];
 let qrGenerated = false;
+
+function toggleQR() {
+  const section = document.getElementById('qr-section');
+  const btn = document.getElementById('qr-toggle');
+  const hidden = section.style.display === 'none';
+  section.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
 
 function showError(msg) {
   errorMsg.textContent = msg;

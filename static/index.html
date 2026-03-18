@@ -273,6 +273,10 @@
 </div>
 
 <script>
+// ============================================================================
+// DOM REFERENCES
+// ============================================================================
+
 const transcript = document.getElementById('transcript');
 const transcriptArea = document.getElementById('transcript-area');
 const emptyState = document.getElementById('empty-state');
@@ -281,12 +285,17 @@ const serverDownBanner = document.getElementById('server-down-banner');
 const statusBadge = document.getElementById('status');
 const themeBtn = document.getElementById('theme-btn');
 
-let ws = null;
-let isCapturing = false;
-let reconnectTimeout = null;
-let autoScroll = true;
+let ws = null;                  // Current WebSocket connection
+let isCapturing = false;        // Whether the server is actively transcribing
+let reconnectTimeout = null;    // Timer handle for auto-reconnect
+let autoScroll = true;          // Whether to auto-scroll as new text arrives
 
-// --- Font size ---
+// ============================================================================
+// FONT SIZE
+// ============================================================================
+// Persisted in localStorage so each user's preference survives page reloads.
+// The A+/A- buttons in the top bar call adjustSize(). Clamped to 18-72px.
+
 let fontSize = parseInt(localStorage.getItem('openear-font-size') || '32');
 document.documentElement.style.setProperty('--font-size', fontSize + 'px');
 
@@ -296,7 +305,13 @@ function adjustSize(delta) {
   localStorage.setItem('openear-font-size', fontSize);
 }
 
-// --- Theme ---
+// ============================================================================
+// THEME (LIGHT / DARK)
+// ============================================================================
+// Toggled via the sun/moon button in the top bar. Persisted in localStorage.
+// Also updates the <meta theme-color> tag so the mobile browser chrome
+// (address bar, status bar) matches the page background.
+
 let theme = localStorage.getItem('openear-theme') || 'dark';
 applyTheme(theme);
 
@@ -322,13 +337,25 @@ function toggleTheme() {
   applyTheme(theme === 'dark' ? 'light' : 'dark');
 }
 
-// --- WebSocket ---
+// ============================================================================
+// WEBSOCKET CONNECTION
+// ============================================================================
+// The client maintains a persistent WebSocket to the server. Two message
+// types come from the server:
+//   - "status"     → tells us if captioning is on/off (show/hide banners)
+//   - "transcript" → a chunk of transcribed text to display
+//
+// If the connection drops (server restart, network blip), we auto-reconnect
+// every 3 seconds and show the "Server Unavailable" banner until it's back.
+
 function getWsUrl() {
+  // Match the page's protocol — ws: for http:, wss: for https:
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return proto + '//' + location.host + '/ws/captions';
 }
 
 function connect() {
+  // Clear any pending reconnect timer (e.g., if we're manually reconnecting)
   if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
 
   ws = new WebSocket(getWsUrl());
@@ -341,11 +368,13 @@ function connect() {
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
+    // Server tells us whether captioning is active (on connect, and on toggle)
     if (data.type === 'status') {
       isCapturing = data.capturing;
       updateCaptureState();
     }
 
+    // New transcription chunk — append it to the display
     if (data.type === 'transcript' && data.text) {
       appendText(data.text);
     }
@@ -358,11 +387,19 @@ function connect() {
   ws.onclose = () => {
     setStatus('', 'Disconnected');
     serverDownBanner.classList.add('visible');
+    // Hide the "disabled" banner when the server is down — "server unavailable"
+    // takes priority and is more accurate
     disabledBanner.classList.remove('visible');
+    // Try to reconnect every 3 seconds
     reconnectTimeout = setTimeout(connect, 3000);
   };
 }
 
+/**
+ * Update the UI based on whether the server is actively captioning.
+ * - Capturing ON:  hide "disabled" banner, show empty state if no text yet
+ * - Capturing OFF: show "disabled" banner, hide empty state
+ */
 function updateCaptureState() {
   if (isCapturing) {
     disabledBanner.classList.remove('visible');
@@ -375,19 +412,37 @@ function updateCaptureState() {
   }
 }
 
-// --- Auto-scroll: lock when user scrolls up, unlock when they reach the bottom ---
+// ============================================================================
+// AUTO-SCROLL
+// ============================================================================
+// By default, the transcript auto-scrolls to keep the latest text visible.
+// If the user scrolls up to re-read something, we stop auto-scrolling so
+// we don't yank them away. When they scroll back to the bottom (within 50px),
+// auto-scroll re-engages. No manual lock button needed.
+
 transcriptArea.addEventListener('scroll', () => {
   const atBottom = transcriptArea.scrollHeight - transcriptArea.scrollTop - transcriptArea.clientHeight < 50;
   autoScroll = atBottom;
 });
 
+// ============================================================================
+// TRANSCRIPT DISPLAY
+// ============================================================================
+
+/**
+ * Append a new chunk of transcribed text to the transcript area.
+ * Each chunk is wrapped in a <span> with a brief fade-in animation.
+ * A space is inserted between chunks so the text reads naturally.
+ */
 function appendText(text) {
   emptyState.classList.add('hidden');
+  // Add a space separator between chunks (not before the first one)
   if (transcript.textContent.length > 0) transcript.appendChild(document.createTextNode(' '));
   const span = document.createElement('span');
   span.className = 'chunk chunk-new';
   span.textContent = text;
   transcript.appendChild(span);
+  // Remove the animation class after it plays so it doesn't replay on reflow
   setTimeout(() => span.classList.remove('chunk-new'), 350);
   if (autoScroll) transcriptArea.scrollTop = transcriptArea.scrollHeight;
 }
@@ -397,24 +452,40 @@ function clearTranscript() {
   if (isCapturing) emptyState.classList.remove('hidden');
 }
 
+/**
+ * Update the status badge in the top-left corner.
+ * cls controls the visual style (connected=green, error=red, default=gray).
+ */
 function setStatus(cls, text) {
   statusBadge.className = cls || '';
   statusBadge.id = 'status';
   statusBadge.textContent = text;
 }
 
-// --- Wake lock ---
+// ============================================================================
+// WAKE LOCK
+// ============================================================================
+// Prevents the phone/tablet screen from going to sleep while viewing captions.
+// Uses the Screen Wake Lock API (supported on modern mobile browsers).
+// If the lock is released (e.g., user switches apps), we automatically
+// re-acquire it when they come back.
+
 let wakeLock = null;
 async function requestWakeLock() {
   try {
     if ('wakeLock' in navigator) {
       wakeLock = await navigator.wakeLock.request('screen');
+      // Re-acquire if released (e.g., tab switch, app switch)
       wakeLock.addEventListener('release', () => requestWakeLock());
     }
   } catch (e) {}
 }
 
-// --- Init ---
+// ============================================================================
+// INIT
+// ============================================================================
+// Connect to the server and request a wake lock on page load.
+
 connect();
 requestWakeLock();
 </script>
