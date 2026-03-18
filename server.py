@@ -1,5 +1,5 @@
 """
-OpenEar v0.3 - Live Speech-to-Text Captioning Server
+OpenEar v0.4 - Live Speech-to-Text Captioning Server with Translation
 
 Architecture overview:
   1. A sounddevice InputStream continuously captures raw audio from a chosen input device
@@ -13,10 +13,11 @@ The admin page (admin.html) controls capture start/stop and device selection via
 The client page (index.html) connects via WebSocket and renders incoming text.
 """
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 import os
 import io
+import json
 import time
 import asyncio
 import logging
@@ -59,6 +60,17 @@ from faster_whisper import WhisperModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+# ============================================================================
+# TRANSLATION (Argos Translate)
+# ============================================================================
+# Argos Translate provides offline machine translation. Language packs are
+# ~50MB each and downloaded on demand. Translation runs on CPU, which is fine
+# since it only takes ~100ms per sentence and doesn't compete with the GPU
+# running Whisper.
+
+import argostranslate.package
+import argostranslate.translate
 
 # ============================================================================
 # CONFIGURATION
@@ -120,6 +132,9 @@ logger.info(f"Model loaded on {DEVICE.upper()} in {time.time() - t0:.1f}s")
 # These globals track the current state of the server. They're modified by
 # the API endpoints and read by the admin page's status polling.
 
+# Client tracking: maps each WebSocket to its preferred language code.
+# "en" means no translation needed. Any other code triggers Argos translation.
+client_languages: dict[WebSocket, str] = {}  # {websocket: "en", websocket2: "ko", ...}
 connected_clients: set[WebSocket] = set()   # All active WebSocket connections
 is_capturing = False                         # Whether we're currently recording audio
 selected_device_id: int | None = None        # Which audio input device is active
@@ -282,19 +297,83 @@ def transcribe_audio_chunk(audio_data: np.ndarray) -> str:
                 pass
 
 
+def get_installed_languages() -> list[dict]:
+    """Return a list of installed Argos Translate language packs.
+
+    Each entry has from_code, to_code, and from/to names.
+    We only care about en -> X packages (translating FROM English).
+    """
+    installed = argostranslate.package.get_installed_packages()
+    languages = []
+    seen = set()
+    for pkg in installed:
+        if pkg.from_code == "en" and pkg.to_code not in seen:
+            seen.add(pkg.to_code)
+            languages.append({
+                "code": pkg.to_code,
+                "name": pkg.to_name,
+            })
+    languages.sort(key=lambda x: x["name"])
+    return languages
+
+
+def translate_text(text: str, target_lang: str) -> str:
+    """Translate English text to the target language using Argos Translate.
+
+    Returns the original text if translation fails or target is English.
+    """
+    if not text or target_lang == "en":
+        return text
+    try:
+        return argostranslate.translate.translate(text, "en", target_lang)
+    except Exception as e:
+        logger.warning(f"Translation to {target_lang} failed: {e}")
+        return text
+
+
 async def broadcast(message: dict):
     """Send a JSON message to every connected WebSocket client.
 
-    If a client has disconnected (broken pipe, network error, etc.), we catch
-    the exception and collect it for removal. We can't modify the set while
-    iterating it, so we batch the removals.
+    For transcript messages, translates the text to each client's preferred
+    language before sending. English clients get the original text with no
+    added latency. Translation results are cached per-broadcast so that if
+    5 clients all want Spanish, we only translate once.
+
+    For non-transcript messages (status updates), sends identically to all.
     """
     disconnected = set()
-    for client in connected_clients:
-        try:
-            await client.send_json(message)
-        except Exception:
-            disconnected.add(client)
+
+    if message.get("type") == "transcript":
+        # Cache translations so each language is only translated once per chunk
+        translation_cache: dict[str, str] = {"en": message["text"]}
+        english_text = message["text"]
+
+        for client in connected_clients:
+            lang = client_languages.get(client, "en")
+            try:
+                if lang not in translation_cache:
+                    # Run translation in executor to not block the event loop
+                    loop = asyncio.get_event_loop()
+                    translated = await loop.run_in_executor(
+                        None, translate_text, english_text, lang
+                    )
+                    translation_cache[lang] = translated
+
+                await client.send_json({
+                    "type": "transcript",
+                    "text": translation_cache[lang],
+                    "lang": lang,
+                })
+            except Exception:
+                disconnected.add(client)
+    else:
+        # Non-transcript messages go to everyone identically
+        for client in connected_clients:
+            try:
+                await client.send_json(message)
+            except Exception:
+                disconnected.add(client)
+
     connected_clients.difference_update(disconnected)
 
 
@@ -461,13 +540,108 @@ async def api_status():
     """Return current server state. Polled by the admin page every 500ms
     to update the UI (audio level meter, client count, capture state).
     """
+    # Count how many clients are using each language
+    lang_counts: dict[str, int] = {}
+    for lang in client_languages.values():
+        lang_counts[lang] = lang_counts.get(lang, 0) + 1
+
     return {
         "capturing": is_capturing,
         "device_id": selected_device_id,
         "clients": len(connected_clients),
         "audio_level": round(current_audio_level, 3),
         "clipping": audio_clipping,
+        "languages": lang_counts,
     }
+
+
+# ============================================================================
+# LANGUAGE / TRANSLATION API ENDPOINTS
+# ============================================================================
+
+@app.get("/api/languages")
+async def list_languages():
+    """Return installed translation language packs and available ones for download."""
+    installed = get_installed_languages()
+    installed_codes = {l["code"] for l in installed}
+
+    # Get all available en -> X packages that aren't already installed
+    try:
+        argostranslate.package.update_package_index()
+        available = argostranslate.package.get_available_packages()
+        downloadable = []
+        seen = set()
+        for pkg in available:
+            if pkg.from_code == "en" and pkg.to_code not in installed_codes and pkg.to_code not in seen:
+                seen.add(pkg.to_code)
+                downloadable.append({
+                    "code": pkg.to_code,
+                    "name": pkg.to_name,
+                })
+        downloadable.sort(key=lambda x: x["name"])
+    except Exception as e:
+        logger.warning(f"Failed to fetch available packages: {e}")
+        downloadable = []
+
+    return {
+        "installed": installed,
+        "available": downloadable,
+    }
+
+
+@app.post("/api/languages/install")
+async def install_language(body: dict):
+    """Download and install a language pack for en -> target_lang.
+
+    This downloads ~50MB per language and may take a few seconds.
+    """
+    target = body.get("code")
+    if not target:
+        return {"error": "language code required"}
+
+    try:
+        argostranslate.package.update_package_index()
+        available = argostranslate.package.get_available_packages()
+        pkg = next(
+            (p for p in available if p.from_code == "en" and p.to_code == target),
+            None
+        )
+        if not pkg:
+            return {"error": f"No package found for en -> {target}"}
+
+        logger.info(f"Downloading language pack: en -> {target}...")
+        download_path = pkg.download()
+        argostranslate.package.install_from_path(download_path)
+        logger.info(f"Language pack installed: en -> {target}")
+
+        return {"status": "installed", "code": target}
+    except Exception as e:
+        logger.error(f"Failed to install language pack en -> {target}: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/languages/remove")
+async def remove_language(body: dict):
+    """Remove an installed language pack."""
+    target = body.get("code")
+    if not target:
+        return {"error": "language code required"}
+
+    try:
+        installed = argostranslate.package.get_installed_packages()
+        pkg = next(
+            (p for p in installed if p.from_code == "en" and p.to_code == target),
+            None
+        )
+        if not pkg:
+            return {"error": f"Package en -> {target} not found"}
+
+        argostranslate.package.uninstall(pkg)
+        logger.info(f"Language pack removed: en -> {target}")
+        return {"status": "removed", "code": target}
+    except Exception as e:
+        logger.error(f"Failed to remove language pack en -> {target}: {e}")
+        return {"error": str(e)}
 
 
 @app.get("/api/server-info")
@@ -526,21 +700,36 @@ async def websocket_captions(websocket: WebSocket):
     """
     await websocket.accept()
     connected_clients.add(websocket)
+    client_languages[websocket] = "en"  # Default to English
     logger.info(f"Client connected ({len(connected_clients)} total)")
 
-    # Tell the new client whether captioning is currently active
+    # Tell the new client whether captioning is currently active,
+    # and send the list of available languages for the dropdown
+    installed = get_installed_languages()
     await websocket.send_json({"type": "status", "capturing": is_capturing})
+    await websocket.send_json({
+        "type": "languages",
+        "languages": [{"code": "en", "name": "English"}] + installed,
+    })
 
     try:
         while True:
-            # Block here waiting for client messages (keeps connection alive).
-            # Clients don't send data, but if the connection drops, this
-            # will raise WebSocketDisconnect.
-            await websocket.receive_text()
+            # Clients can now send messages to set their language preference.
+            # Message format: {"type": "set_language", "lang": "fr"}
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+                if msg.get("type") == "set_language" and msg.get("lang"):
+                    old_lang = client_languages.get(websocket, "en")
+                    client_languages[websocket] = msg["lang"]
+                    logger.info(f"Client switched language: {old_lang} -> {msg['lang']}")
+            except (json.JSONDecodeError, Exception):
+                pass  # Ignore malformed messages
     except WebSocketDisconnect:
         pass
     finally:
         connected_clients.discard(websocket)
+        client_languages.pop(websocket, None)
         logger.info(f"Client disconnected ({len(connected_clients)} total)")
 
 

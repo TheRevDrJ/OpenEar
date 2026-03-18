@@ -104,6 +104,23 @@
   .ctrl-btn:active { background: #374151; }
   html.light .ctrl-btn:active { background: #d1d5db; }
 
+  /* --- Language dropdown --- */
+  #lang-select {
+    font-family: 'Exo 2', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 10px;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    transition: background 0.2s, color 0.2s;
+  }
+
   /* --- Transcript area --- */
   #transcript-area {
     flex: 1;
@@ -243,6 +260,9 @@
   <div id="top-bar">
     <div id="status">Connecting...</div>
     <div id="controls">
+      <select id="lang-select" aria-label="Language" title="Translation language">
+        <option value="en">English</option>
+      </select>
       <button class="ctrl-btn" onclick="adjustSize(-4)" aria-label="Smaller text">A-</button>
       <button class="ctrl-btn" onclick="adjustSize(4)" aria-label="Larger text">A+</button>
       <button class="ctrl-btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode" id="theme-btn">
@@ -284,11 +304,13 @@ const disabledBanner = document.getElementById('disabled-banner');
 const serverDownBanner = document.getElementById('server-down-banner');
 const statusBadge = document.getElementById('status');
 const themeBtn = document.getElementById('theme-btn');
+const langSelect = document.getElementById('lang-select');
 
 let ws = null;                  // Current WebSocket connection
 let isCapturing = false;        // Whether the server is actively transcribing
 let reconnectTimeout = null;    // Timer handle for auto-reconnect
 let autoScroll = true;          // Whether to auto-scroll as new text arrives
+let selectedLang = localStorage.getItem('openear-lang') || 'en';
 
 // ============================================================================
 // FONT SIZE
@@ -363,6 +385,10 @@ function connect() {
   ws.onopen = () => {
     setStatus('connected', 'Connected');
     serverDownBanner.classList.remove('visible');
+    // Tell the server our language preference right away
+    if (selectedLang !== 'en') {
+      ws.send(JSON.stringify({ type: 'set_language', lang: selectedLang }));
+    }
   };
 
   ws.onmessage = (event) => {
@@ -372,6 +398,11 @@ function connect() {
     if (data.type === 'status') {
       isCapturing = data.capturing;
       updateCaptureState();
+    }
+
+    // Server sends the list of available languages (on connect)
+    if (data.type === 'languages') {
+      populateLanguages(data.languages);
     }
 
     // New transcription chunk — append it to the display
@@ -461,6 +492,39 @@ function setStatus(cls, text) {
   statusBadge.id = 'status';
   statusBadge.textContent = text;
 }
+
+// ============================================================================
+// LANGUAGE SELECTION
+// ============================================================================
+// The server sends available languages on connect. The user's choice is
+// persisted in localStorage and sent to the server over WebSocket.
+// English clients get the original text with no translation overhead.
+
+function populateLanguages(languages) {
+  // Rebuild the dropdown options
+  langSelect.innerHTML = '';
+  languages.forEach(lang => {
+    const opt = document.createElement('option');
+    opt.value = lang.code;
+    opt.textContent = lang.name;
+    langSelect.appendChild(opt);
+  });
+  // Restore saved selection (if the language is still available)
+  if (languages.some(l => l.code === selectedLang)) {
+    langSelect.value = selectedLang;
+  } else {
+    langSelect.value = 'en';
+    selectedLang = 'en';
+  }
+}
+
+langSelect.addEventListener('change', () => {
+  selectedLang = langSelect.value;
+  localStorage.setItem('openear-lang', selectedLang);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'set_language', lang: selectedLang }));
+  }
+});
 
 // ============================================================================
 // WAKE LOCK

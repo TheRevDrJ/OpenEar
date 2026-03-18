@@ -258,6 +258,90 @@
   .meter-fill.warm { background: var(--warning); }
   .meter-fill.hot { background: var(--danger); }
 
+  /* --- Language management --- */
+  .lang-list { list-style: none; }
+
+  .lang-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 15px;
+  }
+
+  .lang-item:not(:last-child) { border-bottom: 1px solid var(--surface-hover); }
+
+  .lang-name { font-weight: 600; }
+
+  .lang-count {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: 8px;
+  }
+
+  .lang-btn {
+    font-family: 'Exo 2', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    transition: background 0.2s, opacity 0.2s;
+  }
+
+  .lang-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .lang-btn-remove {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--danger);
+  }
+
+  .lang-btn-remove:hover:not(:disabled) { background: rgba(248, 113, 113, 0.3); }
+
+  .lang-btn-install {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--accent);
+  }
+
+  .lang-btn-install:hover:not(:disabled) { background: rgba(96, 165, 250, 0.3); }
+
+  .lang-add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .lang-add-row select {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .lang-add-row button {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: 'Exo 2', sans-serif;
+  }
+
+  .lang-add-row button:hover { opacity: 0.9; }
+  .lang-add-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .lang-status {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
   .qr-section {
     display: flex;
     flex-direction: column;
@@ -327,6 +411,21 @@
         <div class="meter-fill" id="meter-fill"></div>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Translation Languages</h2>
+    <div id="lang-installed">
+      <p style="color: var(--text-dim); font-size: 14px;">Loading...</p>
+    </div>
+    <div class="lang-add-row">
+      <select id="lang-available">
+        <option value="">Loading languages...</option>
+      </select>
+      <button id="lang-install-btn" onclick="installLanguage()" disabled>Install</button>
+    </div>
+    <div id="lang-status" class="lang-status"></div>
+    <div id="lang-clients" style="margin-top: 12px;"></div>
   </div>
 
   <div class="card">
@@ -509,6 +608,9 @@ async function updateStatus() {
       deviceName.textContent = 'None';
     }
 
+    // Update language breakdown
+    updateLanguageClients(data.languages);
+
     // Audio level meter
     if (data.capturing) {
       meterContainer.style.display = 'block';
@@ -527,8 +629,129 @@ async function updateStatus() {
   }
 }
 
+// ============================================================================
+// LANGUAGE MANAGEMENT
+// ============================================================================
+
+const langInstalled = document.getElementById('lang-installed');
+const langAvailable = document.getElementById('lang-available');
+const langInstallBtn = document.getElementById('lang-install-btn');
+const langStatusEl = document.getElementById('lang-status');
+const langClientsEl = document.getElementById('lang-clients');
+
+async function loadLanguages() {
+  try {
+    const res = await fetch('/api/languages');
+    const data = await res.json();
+
+    // Render installed languages
+    if (data.installed.length === 0) {
+      langInstalled.innerHTML = '<p style="color: var(--text-dim); font-size: 14px;">No translation languages installed. English captions only.</p>';
+    } else {
+      let html = '<ul class="lang-list">';
+      data.installed.forEach(lang => {
+        html += `<li class="lang-item">
+          <span class="lang-name">${lang.name} <span style="color: var(--text-dim); font-size: 13px;">(${lang.code})</span></span>
+          <button class="lang-btn lang-btn-remove" onclick="removeLanguage('${lang.code}')">Remove</button>
+        </li>`;
+      });
+      html += '</ul>';
+      langInstalled.innerHTML = html;
+    }
+
+    // Populate available languages dropdown
+    langAvailable.innerHTML = '';
+    if (data.available.length === 0) {
+      langAvailable.innerHTML = '<option value="">All languages installed</option>';
+      langInstallBtn.disabled = true;
+    } else {
+      langAvailable.innerHTML = '<option value="">Select a language...</option>';
+      data.available.forEach(lang => {
+        const opt = document.createElement('option');
+        opt.value = lang.code;
+        opt.textContent = `${lang.name} (${lang.code})`;
+        langAvailable.appendChild(opt);
+      });
+      langInstallBtn.disabled = false;
+    }
+  } catch (e) {
+    langInstalled.innerHTML = '<p style="color: var(--danger); font-size: 14px;">Failed to load languages</p>';
+  }
+}
+
+async function installLanguage() {
+  const code = langAvailable.value;
+  if (!code) return;
+
+  const name = langAvailable.options[langAvailable.selectedIndex].textContent;
+  langInstallBtn.disabled = true;
+  langStatusEl.textContent = `Downloading ${name}... This may take a minute.`;
+
+  try {
+    const res = await fetch('/api/languages/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      langStatusEl.textContent = 'Error: ' + data.error;
+    } else {
+      langStatusEl.textContent = `${name} installed successfully!`;
+      setTimeout(() => { langStatusEl.textContent = ''; }, 3000);
+      await loadLanguages();
+    }
+  } catch (e) {
+    langStatusEl.textContent = 'Failed to install language pack.';
+  } finally {
+    langInstallBtn.disabled = false;
+  }
+}
+
+async function removeLanguage(code) {
+  if (!confirm(`Remove translation for "${code}"? Connected clients using this language will switch back to English.`)) return;
+
+  langStatusEl.textContent = `Removing ${code}...`;
+
+  try {
+    const res = await fetch('/api/languages/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      langStatusEl.textContent = 'Error: ' + data.error;
+    } else {
+      langStatusEl.textContent = `Removed ${code}.`;
+      setTimeout(() => { langStatusEl.textContent = ''; }, 3000);
+      await loadLanguages();
+    }
+  } catch (e) {
+    langStatusEl.textContent = 'Failed to remove language pack.';
+  }
+}
+
+// Show language breakdown in status updates
+function updateLanguageClients(langCounts) {
+  if (!langCounts || Object.keys(langCounts).length === 0) {
+    langClientsEl.innerHTML = '';
+    return;
+  }
+
+  const parts = Object.entries(langCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([lang, count]) => `<span style="font-weight:600;">${count}</span> ${lang.toUpperCase()}`)
+    .join(', ');
+
+  langClientsEl.innerHTML = `<div style="font-size: 13px; color: var(--text-dim);">Connected: ${parts}</div>`;
+}
+
 // Init
 loadServerInfo();
+loadLanguages();
 loadDevices().then(() => updateStatus());
 setInterval(updateStatus, 500);
 </script>
