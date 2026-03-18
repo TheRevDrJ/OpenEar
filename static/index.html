@@ -5,18 +5,17 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<meta property="og:image" content="/og-image.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="theme-color" content="#1a1a2e">
+<meta name="theme-color" content="#111827">
 <title>OpenEar</title>
 <link rel="manifest" href="/static/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500&family=DM+Sans:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -25,10 +24,18 @@
     --text: #f1f0eb;
     --text-dim: #9ca3af;
     --accent: #60a5fa;
-    --accent-glow: rgba(96, 165, 250, 0.15);
     --danger: #f87171;
     --surface: #1f2937;
     --font-size: 32px;
+  }
+
+  html.light {
+    --bg: #f5f5f0;
+    --text: #1a1a2e;
+    --text-dim: #6b7280;
+    --accent: #3b82f6;
+    --danger: #ef4444;
+    --surface: #e5e5e0;
   }
 
   html, body {
@@ -36,8 +43,9 @@
     overflow: hidden;
     background: var(--bg);
     color: var(--text);
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Exo 2', sans-serif;
     -webkit-font-smoothing: antialiased;
+    transition: background 0.3s, color 0.3s;
   }
 
   #app {
@@ -47,10 +55,60 @@
     height: 100dvh;
   }
 
+  /* --- Top bar --- */
+  #top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    z-index: 20;
+  }
+
+  #status {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--text-dim);
+    transition: all 0.3s ease;
+  }
+
+  #status.connected { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+  #status.error { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ctrl-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Exo 2', sans-serif;
+    transition: background 0.2s, color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ctrl-btn:active { background: #374151; }
+  html.light .ctrl-btn:active { background: #d1d5db; }
+
+  /* --- Transcript area --- */
   #transcript-area {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 20px 100px 20px;
+    padding: 60px 20px 100px 20px;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
   }
@@ -75,137 +133,68 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  #listening-indicator {
+  /* --- Disabled banner (fixed bottom) --- */
+  #disabled-banner {
     display: none;
-    margin-top: 16px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 16px;
-    color: var(--text-dim);
-    letter-spacing: 0.03em;
-  }
-
-  #listening-indicator.active {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .pulse-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 0.3; transform: scale(0.85); }
-    50%      { opacity: 1;   transform: scale(1.1); }
-  }
-
-  #controls {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
+    z-index: 15;
+    text-align: center;
     padding: 16px 20px;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
-    background: linear-gradient(transparent, var(--bg) 30%);
-    z-index: 10;
+    background: rgba(248, 113, 113, 0.12);
+    border-top: 2px solid var(--danger);
   }
 
-  button {
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 700;
-    border: none;
-    border-radius: 16px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    -webkit-tap-highlight-color: transparent;
+  #disabled-banner.visible {
+    display: block;
   }
 
-  #listen-btn {
+  #disabled-banner .disabled-text {
     font-size: 22px;
-    padding: 18px 48px;
-    background: var(--accent);
-    color: #111827;
+    font-weight: 800;
+    color: var(--danger);
     letter-spacing: 0.04em;
-    box-shadow: 0 0 0 0 var(--accent-glow);
+    text-transform: uppercase;
   }
 
-  #listen-btn:active { transform: scale(0.96); }
-
-  #listen-btn.listening {
-    background: var(--danger);
-    color: #fff;
-    animation: glowPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 20px 0 rgba(248, 113, 113, 0.2); }
-    50%      { box-shadow: 0 0 30px 8px rgba(248, 113, 113, 0.3); }
-  }
-
-  #clear-btn {
-    font-size: 15px;
-    padding: 14px 24px;
-    background: var(--surface);
+  #disabled-banner .disabled-sub,
+  #server-down-banner .disabled-sub {
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text-dim);
-    letter-spacing: 0.03em;
+    margin-top: 4px;
   }
 
-  #clear-btn:active { transform: scale(0.96); background: #374151; }
-
-  #size-controls {
+  #server-down-banner {
+    display: none;
     position: fixed;
-    top: 12px;
-    right: 12px;
-    display: flex;
-    gap: 6px;
-    z-index: 20;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 16;
+    text-align: center;
+    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    background: rgba(248, 113, 113, 0.12);
+    border-top: 2px solid var(--danger);
   }
 
-  #size-controls:hover, #size-controls:active { opacity: 1; }
-
-  .size-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface);
-    color: var(--text-dim);
-    border-radius: 10px;
+  #server-down-banner.visible {
+    display: block;
   }
 
-  .size-btn:active { background: #374151; }
-
-  #status {
-    position: fixed;
-    top: 12px;
-    left: 12px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    padding: 6px 14px;
-    border-radius: 20px;
-    background: var(--surface);
-    color: var(--text-dim);
-    z-index: 20;
-    transition: all 0.3s ease;
-    opacity: 0.7;
+  #server-down-banner .disabled-text {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--danger);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
-  #status.connected { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-  #status.error { background: rgba(248, 113, 113, 0.15); color: #f87171; opacity: 1; }
-
+  /* --- Empty state --- */
   #empty-state {
     position: absolute;
     top: 50%;
@@ -213,15 +202,37 @@
     transform: translate(-50%, -60%);
     text-align: center;
     color: var(--text-dim);
-    font-family: 'DM Sans', sans-serif;
     pointer-events: none;
     transition: opacity 0.4s ease;
   }
 
   #empty-state.hidden { opacity: 0; }
-  #empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: 0.4; }
-  #empty-state p { font-size: 18px; line-height: 1.6; }
+  #empty-state p { font-size: 18px; line-height: 1.6; font-weight: 600; }
 
+  /* --- Clear button --- */
+  #clear-btn {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    font-family: 'Exo 2', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 20px;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    z-index: 20;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #clear-btn:hover, #clear-btn:active { opacity: 1; }
+
+  /* --- Scrollbar --- */
   #transcript-area::-webkit-scrollbar { width: 4px; }
   #transcript-area::-webkit-scrollbar-track { background: transparent; }
   #transcript-area::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
@@ -229,151 +240,142 @@
 </head>
 <body>
 <div id="app">
-  <div id="status">Disconnected</div>
-  <div id="size-controls">
-    <button class="size-btn" onclick="adjustSize(-4)" aria-label="Smaller text">A-</button>
-    <button class="size-btn" onclick="adjustSize(4)" aria-label="Larger text">A+</button>
+  <div id="top-bar">
+    <div id="status">Connecting...</div>
+    <div id="controls">
+      <button class="ctrl-btn" onclick="adjustSize(-4)" aria-label="Smaller text">A-</button>
+      <button class="ctrl-btn" onclick="adjustSize(4)" aria-label="Larger text">A+</button>
+      <button class="ctrl-btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode" id="theme-btn">
+        <svg id="theme-icon-dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
   </div>
+
   <div id="transcript-area">
     <div id="empty-state">
-      <div class="icon">&#127908;</div>
-      <p>Tap <strong>Listen</strong> to start<br>live captioning</p>
+      <p>Waiting for captions...</p>
     </div>
     <div id="transcript"></div>
-    <div id="listening-indicator">
-      <div class="pulse-dot"></div>
-      <span>Listening...</span>
-    </div>
   </div>
-  <div id="controls">
-    <button id="clear-btn" onclick="clearTranscript()">Clear</button>
-    <button id="listen-btn" onclick="toggleListening()">Listen</button>
+
+  <button id="clear-btn" onclick="clearTranscript()">Clear</button>
+
+  <div id="disabled-banner">
+    <div class="disabled-text">OpenEar Disabled</div>
+    <div class="disabled-sub">Captioning will appear here when enabled</div>
+  </div>
+
+  <div id="server-down-banner">
+    <div class="disabled-text">Server Unavailable</div>
+    <div class="disabled-sub">Attempting to reconnect...</div>
   </div>
 </div>
-<script>
-let isListening = false;
-let mediaRecorder = null;
-let ws = null;
-let audioChunks = [];
-let mimeType = '';
-const CHUNK_DURATION_MS = 3000;
 
-const listenBtn = document.getElementById('listen-btn');
+<script>
 const transcript = document.getElementById('transcript');
 const transcriptArea = document.getElementById('transcript-area');
-const indicator = document.getElementById('listening-indicator');
 const emptyState = document.getElementById('empty-state');
+const disabledBanner = document.getElementById('disabled-banner');
+const serverDownBanner = document.getElementById('server-down-banner');
 const statusBadge = document.getElementById('status');
+const themeBtn = document.getElementById('theme-btn');
 
-let fontSize = parseInt(localStorage.getItem('caption-font-size') || '32');
+let ws = null;
+let isCapturing = false;
+let reconnectTimeout = null;
+
+// --- Font size ---
+let fontSize = parseInt(localStorage.getItem('openear-font-size') || '32');
 document.documentElement.style.setProperty('--font-size', fontSize + 'px');
 
 function adjustSize(delta) {
   fontSize = Math.max(18, Math.min(72, fontSize + delta));
   document.documentElement.style.setProperty('--font-size', fontSize + 'px');
-  localStorage.setItem('caption-font-size', fontSize);
+  localStorage.setItem('openear-font-size', fontSize);
 }
 
+// --- Theme ---
+let theme = localStorage.getItem('openear-theme') || 'dark';
+applyTheme(theme);
+
+function applyTheme(t) {
+  theme = t;
+  const iconDark = document.getElementById('theme-icon-dark');
+  const iconLight = document.getElementById('theme-icon-light');
+  if (t === 'light') {
+    document.documentElement.classList.add('light');
+    iconDark.style.display = 'none';
+    iconLight.style.display = 'block';
+    document.querySelector('meta[name="theme-color"]').content = '#f5f5f0';
+  } else {
+    document.documentElement.classList.remove('light');
+    iconDark.style.display = 'block';
+    iconLight.style.display = 'none';
+    document.querySelector('meta[name="theme-color"]').content = '#111827';
+  }
+  localStorage.setItem('openear-theme', t);
+}
+
+function toggleTheme() {
+  applyTheme(theme === 'dark' ? 'light' : 'dark');
+}
+
+// --- WebSocket ---
 function getWsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return proto + '//' + location.host + '/ws/transcribe';
+  return proto + '//' + location.host + '/ws/captions';
 }
 
-function connectWebSocket() {
-  return new Promise((resolve, reject) => {
-    ws = new WebSocket(getWsUrl());
-    ws.onopen = () => { setStatus('connected', 'Connected'); resolve(); };
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.text) appendText(data.text);
-    };
-    ws.onerror = (err) => { setStatus('error', 'Connection failed'); reject(err); };
-    ws.onclose = () => {
-      setStatus('', 'Disconnected');
-      if (isListening) {
-        setTimeout(() => { if (isListening) connectWebSocket().catch(() => stopListening()); }, 2000);
-      }
-    };
-  });
-}
+function connect() {
+  if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
 
-let audioStream = null;
+  ws = new WebSocket(getWsUrl());
 
-async function startAudioCapture() {
-  audioStream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }
-  });
-  mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus' : 'audio/webm';
-
-  startRecordingCycle();
-}
-
-function startRecordingCycle() {
-  if (!isListening || !audioStream) return;
-
-  audioChunks = [];
-  mediaRecorder = new MediaRecorder(audioStream, { mimeType: mimeType });
-
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) audioChunks.push(e.data);
+  ws.onopen = () => {
+    setStatus('connected', 'Connected');
+    serverDownBanner.classList.remove('visible');
   };
 
-  mediaRecorder.onstop = () => {
-    if (audioChunks.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
-      const blob = new Blob(audioChunks, { type: mimeType });
-      blob.arrayBuffer().then(buf => {
-        if (ws && ws.readyState === WebSocket.OPEN) ws.send(buf);
-      });
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.type === 'status') {
+      isCapturing = data.capturing;
+      updateCaptureState();
     }
-    if (isListening) startRecordingCycle();
+
+    if (data.type === 'transcript' && data.text) {
+      appendText(data.text);
+    }
   };
 
-  mediaRecorder.start();
-  setTimeout(() => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
+  ws.onerror = () => {
+    setStatus('error', 'Connection failed');
+  };
+
+  ws.onclose = () => {
+    setStatus('', 'Disconnected');
+    serverDownBanner.classList.add('visible');
+    disabledBanner.classList.remove('visible');
+    reconnectTimeout = setTimeout(connect, 3000);
+  };
+}
+
+function updateCaptureState() {
+  if (isCapturing) {
+    disabledBanner.classList.remove('visible');
+    if (transcript.textContent.length === 0) {
+      emptyState.classList.remove('hidden');
     }
-  }, CHUNK_DURATION_MS);
-}
-
-async function toggleListening() { if (isListening) stopListening(); else await startListening(); }
-
-async function startListening() {
-  try {
-    listenBtn.textContent = '...'; listenBtn.disabled = true;
-    await connectWebSocket();
-    isListening = true;
-    await startAudioCapture();
-    listenBtn.textContent = 'Stop'; listenBtn.classList.add('listening'); listenBtn.disabled = false;
-    indicator.classList.add('active'); emptyState.classList.add('hidden');
-    requestWakeLock();
-  } catch (err) {
-    console.error('Start error:', err);
-    setStatus('error', 'Mic access denied');
-    listenBtn.textContent = 'Listen'; listenBtn.disabled = false;
-    stopListening();
+  } else {
+    disabledBanner.classList.add('visible');
+    emptyState.classList.add('hidden');
   }
-}
-
-function stopListening() {
-  isListening = false;
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-    mediaRecorder = null;
-  }
-  if (audioStream) {
-    audioStream.getTracks().forEach(t => t.stop());
-    audioStream = null;
-  }
-  if (ws) { ws.close(); ws = null; }
-  audioChunks = [];
-  listenBtn.textContent = 'Listen'; listenBtn.classList.remove('listening'); listenBtn.disabled = false;
-  indicator.classList.remove('active');
-  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 
 function appendText(text) {
+  emptyState.classList.add('hidden');
   if (transcript.textContent.length > 0) transcript.appendChild(document.createTextNode(' '));
   const span = document.createElement('span');
   span.className = 'chunk chunk-new';
@@ -385,20 +387,29 @@ function appendText(text) {
 
 function clearTranscript() {
   transcript.innerHTML = '';
-  if (!isListening) emptyState.classList.remove('hidden');
+  if (isCapturing) emptyState.classList.remove('hidden');
 }
 
-function setStatus(cls, text) { statusBadge.className = cls || ''; statusBadge.id = 'status'; statusBadge.textContent = text; }
+function setStatus(cls, text) {
+  statusBadge.className = cls || '';
+  statusBadge.id = 'status';
+  statusBadge.textContent = text;
+}
 
+// --- Wake lock ---
 let wakeLock = null;
 async function requestWakeLock() {
   try {
     if ('wakeLock' in navigator) {
       wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => { if (isListening) requestWakeLock(); });
+      wakeLock.addEventListener('release', () => requestWakeLock());
     }
   } catch (e) {}
 }
+
+// --- Init ---
+connect();
+requestWakeLock();
 </script>
 </body>
 </html>
