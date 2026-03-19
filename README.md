@@ -76,4 +76,4 @@ If you're a pastor interested in bringing OpenEar to your church, or a developer
 
 ## License
 
-MIT — use it, modify it, share it. Free forever.
+AGPL-3.0 — use it, modify it, share it. Free forever. If you distribute or run a modified version, you must share your changes under the same license.
