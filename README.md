@@ -111,12 +111,6 @@ That's it. The setup script handles everything else.
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
 | v1.0 | Public release — automatically deployable for any church | ○ Planned |
 
-## Origin
-
-The name OpenEar comes from the spirit of open-source accessibility. The project was inspired by Mark 7:34 — *Ephphatha*, "Be opened."
-
-Built at Oak Park United Methodist Church in Temple, TX, because every congregation deserves accessibility — not just the ones that can afford it.
-
 ## Get Involved
 
 If you're a pastor interested in bringing OpenEar to your church, or a developer who wants to contribute, open an issue or reach out. This is a passion project — the goal is to remove barriers, not build a business.
