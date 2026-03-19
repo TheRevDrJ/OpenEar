@@ -1,0 +1,244 @@
+============================================================================
+  OpenEar Setup Guide
+============================================================================
+
+OpenEar is a free, open-source, real-time AI captioning and translation
+system designed for churches. It runs 100% locally — no internet required
+during services, no cloud subscriptions, no recurring costs.
+
+Requirements:
+  - Windows 10 or 11
+  - NVIDIA GPU recommended (RTX series for best performance)
+  - Audio input (microphone, mixer line-in, or USB audio interface)
+  - WiFi network for client devices (phones, tablets)
+
+
+============================================================================
+  STEP 1: Install Python
+============================================================================
+
+1. Open the Microsoft Store on your computer
+2. Search for "Python 3.13"
+3. Click "Get" or "Install"
+4. Wait for it to finish
+
+That's it. The Microsoft Store version automatically adds Python to your
+PATH, which is required for OpenEar to work.
+
+To verify, open a Command Prompt and type:
+  python --version
+
+You should see something like "Python 3.13.x".
+
+
+============================================================================
+  STEP 2: Install NVIDIA Drivers (if you have an NVIDIA GPU)
+============================================================================
+
+If your computer has an NVIDIA GPU (required for real-time performance),
+you MUST install the latest drivers from NVIDIA before running OpenEar.
+Without proper drivers, the system will be very unstable.
+
+IMPORTANT: Windows includes a basic display driver that will show your
+GPU name correctly in Device Manager and display settings. This is NOT
+the same as the full NVIDIA driver. The Windows built-in driver does
+not include CUDA support, which OpenEar requires for GPU acceleration.
+You must download and install the driver directly from NVIDIA.
+
+1. Go to https://www.nvidia.com/drivers
+2. Find and download the correct driver for your GPU
+3. Run the installer
+4. Restart your computer
+
+To verify the FULL NVIDIA driver is installed (not just the Windows
+built-in one), open a Command Prompt and type:
+  nvidia-smi
+
+If you see your GPU name, driver version, and CUDA version, you're good.
+If the command is not recognized, you need to install the NVIDIA driver.
+
+
+============================================================================
+  STEP 3: Download OpenEar
+============================================================================
+
+Option A — With Git (recommended):
+  1. Install Git from https://git-scm.com if you don't have it
+  2. Open a Command Prompt
+  3. Navigate to where you want OpenEar installed, for example:
+       cd C:\
+  4. Clone the repository:
+       git clone https://github.com/TheRevDrJ/OpenEar.git
+  5. You now have a C:\OpenEar folder
+
+Option B — Without Git:
+  1. Go to https://github.com/TheRevDrJ/OpenEar
+  2. Click the green "Code" button, then "Download ZIP"
+  3. Extract the ZIP to a location like C:\OpenEar
+
+
+============================================================================
+  STEP 4: Run the Setup Script
+============================================================================
+
+The setup script installs all dependencies, configures Windows, and
+downloads the AI model. It must be run as Administrator.
+
+1. Open File Explorer and navigate to your OpenEar folder
+2. Find "setup.bat"
+3. Right-click "setup.bat"
+4. Click "Run as administrator"
+5. If Windows asks "Do you want to allow this app to make changes?"
+   click "Yes"
+6. Wait for the setup to complete (5-15 minutes depending on internet
+   speed — the AI model is about 3GB)
+7. You should see "[OK]" next to each step. If any step shows "[FAIL]",
+   note the error message and refer to the Troubleshooting section below.
+
+IMPORTANT: If this is a fresh Windows installation, restart your computer
+after setup completes. This activates the long path support that some
+packages require.
+
+
+============================================================================
+  STEP 5: Start OpenEar
+============================================================================
+
+1. Open a Command Prompt
+2. Navigate to the OpenEar folder:
+     cd C:\OpenEar
+3. Start the server:
+     openear.bat start
+
+You should see:
+     OpenEar is running (PID: xxxxx)
+     Admin:  http://localhost/admin.html
+     Client: http://localhost
+
+4. Open a browser and go to http://localhost/admin.html
+5. Select your audio input device from the dropdown
+6. Toggle "Captioning" on
+7. Speak into your microphone — you should see captions appear
+
+
+============================================================================
+  STEP 6: Connect Client Devices
+============================================================================
+
+Any phone, tablet, or computer on the same WiFi network can view captions.
+
+1. On the admin page, scan the QR code with a phone, OR
+2. Type the URL shown on the admin page into any browser
+   (usually http://COMPUTERNAME.local)
+
+Clients can:
+  - Choose their language from the dropdown (if translation packs are
+    installed via the admin page)
+  - Adjust text size with the A+ / A- buttons
+  - Toggle light/dark mode
+
+
+============================================================================
+  Managing OpenEar
+============================================================================
+
+All commands are run from a Command Prompt in the OpenEar folder.
+
+  openear.bat start      Start the server in the background
+  openear.bat stop       Stop the server
+  openear.bat restart    Stop and restart the server
+  openear.bat status     Check if the server is running
+  openear.bat verbose    Start with live logs visible (for troubleshooting)
+  openear.bat log        Watch the log file in real time
+  openear.bat devices    List available audio input devices
+  openear.bat version    Show the OpenEar version
+  openear.bat help       Show all available commands
+
+
+============================================================================
+  Translation Setup
+============================================================================
+
+OpenEar can translate captions into other languages in real time.
+Translation runs locally — no internet needed during services.
+
+To add a language:
+  1. Go to the admin page
+  2. In the "Translation Languages" section, select a language from the
+     dropdown
+  3. Click "Install" (downloads ~50MB per language, requires internet)
+  4. The language is now available for clients to select
+
+Clients choose their language from the dropdown on the caption page.
+English clients experience zero added latency. Translated clients see
+captions with roughly 100ms additional delay — unnoticeable in practice.
+
+
+============================================================================
+  Troubleshooting
+============================================================================
+
+"Python is not installed or not on PATH"
+  → Install Python 3.13 from the Microsoft Store (Step 1)
+
+"Could not install packages due to an OSError" with long file paths
+  → Run setup.bat as Administrator — it enables long path support
+  → Restart your computer after setup, then try again
+
+"No input devices found" or missing audio devices
+  → Plug in your audio device BEFORE starting OpenEar
+  → Click "Refresh devices" on the admin page
+  → If still missing, restart the server: openear.bat restart
+
+Clients can't connect from other devices
+  → Make sure all devices are on the same WiFi network
+  → Try using the IP address instead of the hostname
+    (shown on the admin page under "Server IP")
+  → Verify the firewall rule was added (setup.bat does this)
+
+iOS says "server can't be found"
+  → Use http://COMPUTERNAME.local (with .local suffix)
+  → mDNS/Bonjour is built into iOS and resolves .local addresses
+
+Captions are slow or inaccurate
+  → An NVIDIA GPU is strongly recommended. CPU-only mode works but
+    is significantly slower.
+  → Ensure your audio input is clear — check the audio level meter
+    on the admin page
+  → If the level meter shows "CLIPPING", turn down the input gain
+
+Server won't start on port 80
+  → Another application may be using port 80 (Skype, IIS, etc.)
+  → Check with: netstat -ano | findstr ":80 "
+  → Stop the conflicting application, or contact the OpenEar community
+    for help changing the port
+
+No GPU acceleration (Whisper running on CPU)
+  → Ensure you have an NVIDIA GPU with up-to-date drivers
+  → The setup script installs CUDA libraries via pip — no separate
+    CUDA Toolkit installation should be needed
+  → Run "nvidia-smi" in a Command Prompt to verify your GPU is detected
+
+
+============================================================================
+  Typical Church Setup
+============================================================================
+
+  1. Connect a mixer's line-out or aux-send to the PC's line-in
+     (or use a USB audio interface)
+  2. Start OpenEar before the service: openear.bat start
+  3. Open the admin page, select the audio input, toggle captioning on
+  4. Display the QR code on a screen or print it for the bulletin
+  5. Congregation members scan the QR code on their phones
+  6. After the service: openear.bat stop
+
+The server uses about 8.5GB of GPU memory with the large-v3 model.
+A computer with an NVIDIA RTX 3060 (12GB) or better is recommended.
+
+
+============================================================================
+  Getting Help
+============================================================================
+
+  GitHub: https://github.com/TheRevDrJ/OpenEar
+  Issues: https://github.com/TheRevDrJ/OpenEar/issues

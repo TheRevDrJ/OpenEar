@@ -16,6 +16,7 @@ The client page (index.html) connects via WebSocket and renders incoming text.
 VERSION = "0.4.0"
 
 import os
+import sys
 import io
 import json
 import time
@@ -559,6 +560,23 @@ async def api_status():
 # LANGUAGE / TRANSLATION API ENDPOINTS
 # ============================================================================
 
+# Cache the Argos package index fetch — only try once per server session.
+# If it fails (no internet, no SSL certs), installed languages still work;
+# you just can't browse new ones to download until the server restarts.
+_package_index_updated = False
+
+def _update_package_index_once():
+    global _package_index_updated
+    if _package_index_updated:
+        return
+    try:
+        argostranslate.package.update_package_index()
+        _package_index_updated = True
+    except Exception as e:
+        _package_index_updated = True  # Don't retry on failure
+        logger.warning(f"Could not fetch language package index: {e}")
+
+
 @app.get("/api/languages")
 async def list_languages():
     """Return installed translation language packs and available ones for download."""
@@ -566,8 +584,8 @@ async def list_languages():
     installed_codes = {l["code"] for l in installed}
 
     # Get all available en -> X packages that aren't already installed
+    _update_package_index_once()
     try:
-        argostranslate.package.update_package_index()
         available = argostranslate.package.get_available_packages()
         downloadable = []
         seen = set()
@@ -600,7 +618,7 @@ async def install_language(body: dict):
         return {"error": "language code required"}
 
     try:
-        argostranslate.package.update_package_index()
+        _update_package_index_once()
         available = argostranslate.package.get_available_packages()
         pkg = next(
             (p for p in available if p.from_code == "en" and p.to_code == target),
@@ -793,5 +811,11 @@ if __name__ == "__main__":
 
     logging.getLogger("uvicorn.access").addFilter(QuietAccessFilter())
 
+    # When running under pythonw (headless/no console), sys.stdout is None.
+    # Uvicorn's default log formatter calls sys.stdout.isatty() which crashes.
+    # Disable uvicorn's log config in headless mode — our own logging still works.
+    headless = sys.stdout is None
+    log_config = None if headless else uvicorn.config.LOGGING_CONFIG
+
     logger.info(f"Server running at http://0.0.0.0:{PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info", log_config=log_config)

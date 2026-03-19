@@ -36,11 +36,17 @@ if defined RUNNING_PID (
     exit /b 0
 )
 
+:: Clean up any stale pythonw processes before starting
+for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='pythonw.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
+    taskkill /F /PID %%p > nul 2>&1
+)
+ping 127.0.0.1 -n 2 > nul
+
 echo Starting OpenEar...
 start "" /b pythonw "%SERVER_SCRIPT%" > nul 2>&1
 
-:: Give the model a moment to load and bind the port
-ping 127.0.0.1 -n 6 > nul
+:: Give the model time to load and bind the port (slower GPUs need ~20s)
+ping 127.0.0.1 -n 21 > nul
 
 call :find_pid
 if defined RUNNING_PID (
@@ -67,29 +73,34 @@ exit /b 0
 
 :: ============================================================================
 :stop
-::   Finds and kills the server process by port.
+::   Kills any process on port 80, plus any pythonw running server.py.
+::   This catches both the active server AND any stale processes that
+::   failed to bind but are still holding GPU memory.
 :: ============================================================================
-call :find_pid
-if not defined RUNNING_PID (
-    echo OpenEar is not running.
-    if exist "%PID_FILE%" del "%PID_FILE%"
-    exit /b 0
-)
+set "FOUND_SOMETHING=0"
 
-echo Stopping OpenEar ^(PID: !RUNNING_PID!^)...
-taskkill /F /PID !RUNNING_PID! > nul 2>&1
-ping 127.0.0.1 -n 3 > nul
-
-:: Verify it's actually dead
+:: Kill whatever is on port 80
 call :find_pid
 if defined RUNNING_PID (
-    echo Process still alive. Retrying...
+    echo Stopping OpenEar on port 80 ^(PID: !RUNNING_PID!^)...
     taskkill /F /PID !RUNNING_PID! > nul 2>&1
-    ping 127.0.0.1 -n 3 > nul
+    set "FOUND_SOMETHING=1"
 )
 
+:: Kill any stale pythonw processes running server.py
+for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='pythonw.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
+    echo Killing stale pythonw process ^(PID: %%p^)...
+    taskkill /F /PID %%p > nul 2>&1
+    set "FOUND_SOMETHING=1"
+)
+
+if "!FOUND_SOMETHING!"=="0" (
+    echo OpenEar is not running.
+)
+
+ping 127.0.0.1 -n 3 > nul
 if exist "%PID_FILE%" del "%PID_FILE%"
-echo OpenEar stopped.
+if "!FOUND_SOMETHING!"=="1" echo OpenEar stopped.
 exit /b 0
 
 :: ============================================================================
