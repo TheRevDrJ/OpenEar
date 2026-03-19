@@ -11,7 +11,7 @@
 
 ## What It Does
 
-OpenEar taps audio directly from your soundboard and uses [Whisper AI](https://github.com/SYSTRAN/faster-whisper) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any language your congregation needs.
+OpenEar taps audio directly from your soundboard and uses [Whisper AI](https://github.com/SYSTRAN/faster-whisper) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any language your congregation needs using [Argos Translate](https://github.com/argosopentech/argos-translate), a local open-source translation engine.
 
 No app to install. No account to create. Just open a browser.
 
