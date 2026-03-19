@@ -1,3 +1,6 @@
+# OpenEar — Real-time AI captioning and translation for churches
+# Copyright (c) 2026 TheRevDrJ
+# Licensed under AGPL-3.0 — see LICENSE file for details
 """Download the Whisper model for first-time setup."""
 import os
 from pathlib import Path
