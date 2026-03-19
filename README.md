@@ -57,12 +57,16 @@ Open `http://<server-ip>:8620` on any device on the same network.
 
 | Version | Feature | Status |
 |---------|---------|--------|
-| v0.1 | Proof of concept — tablet mic, WebSocket, Whisper, text on screen | ✓ Done |
-| v0.2 | Server-side mic capture — soundboard audio, tablets become display-only | ✓ Done |
-| v0.3 | UI polish — better client experience, settings, admin page | ✓ Done |
-| v0.4 | Real-time translation — language picker, local translation model | Planned |
-| v0.5 | Packaging — one-click installer, setup wizard, Mac Mini deployment | Planned |
-| v1.0 | Release — ready for any church | Planned |
+| v0.1 | Proof of concept — live transcription via browser | ✓ Done |
+| v0.2 | Server-side mic capture from soundboard | ✓ Done |
+| v0.3 | UI polish, quality presets, admin settings | ✓ Done |
+| v0.4 | Real-time translation — any language, any device | ✓ Done |
+| v0.5 | One-click installer | ✓ Done |
+| v0.6 | Mac Mini testing | ◐ In progress... |
+| v0.7 | Testing at select churches | ○ Planned |
+| v0.8 | Expanded testing & feedback | ○ Planned |
+| v0.9 | Public release — manually deployable for any church | ○ Planned |
+| v1.0 | Public release — automatically deployable for any church | ○ Planned |
 
 ## Origin
 
