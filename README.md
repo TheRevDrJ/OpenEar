@@ -70,9 +70,9 @@ This is the actual hardware OpenEar is developed and tested on:
 
 | Resource | Usage |
 |----------|-------|
-| RAM in use | *TBD — testing in progress* |
-| VRAM in use | *TBD — testing in progress* |
-| Disk space | *TBD — testing in progress* |
+| RAM in use | ~7 GB of 64 GB |
+| VRAM in use | ~4.4 GB of 12 GB |
+| Disk space | ~100 GB (includes OS, models, and translation packs) |
 
 *This server is significantly overpowered for OpenEar. The goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality.*
 
