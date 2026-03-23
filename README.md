@@ -123,3 +123,7 @@ If you're a pastor interested in bringing OpenEar to your church, or a developer
 
 - **Website:** [openearproject.org](https://openearproject.org)
 - **GitHub:** [TheRevDrJ/OpenEar](https://github.com/TheRevDrJ/OpenEar)
+
+---
+
+Built with [__Ephphatha__](https://github.com/TheRevDrJ). 🙌
