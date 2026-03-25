@@ -28,6 +28,18 @@
     --surface-hover: #374151;
   }
 
+  html.light {
+    --bg: #f5f5f0;
+    --text: #1a1a2e;
+    --text-dim: #6b7280;
+    --accent: #3b82f6;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --surface: #e5e5e0;
+    --surface-hover: #d1d5db;
+  }
+
   html, body {
     height: 100%;
     background: var(--bg);
@@ -264,88 +276,72 @@
   .meter-fill.hot { background: var(--danger); }
 
   /* --- Language management --- */
-  .lang-list { list-style: none; }
+  .lang-list {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-hover) transparent;
+  }
+
+  .lang-list::-webkit-scrollbar { width: 6px; }
+  .lang-list::-webkit-scrollbar-track { background: transparent; }
+  .lang-list::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 3px; }
+  .lang-list::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
   .lang-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0;
-    font-size: 15px;
+    padding: 8px 0;
+    font-size: 14px;
   }
 
   .lang-item:not(:last-child) { border-bottom: 1px solid var(--surface-hover); }
 
-  .lang-name { font-weight: 600; }
+  .lang-name { font-weight: 500; }
+  .lang-name.disabled { color: var(--text-dim); }
 
-  .lang-count {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-left: 8px;
-  }
+  .lang-switch { position: relative; display: block; width: 28px; height: 16px; flex-shrink: 0; align-self: center; transform: translateY(3px); }
+  .lang-switch input { opacity: 0; width: 0; height: 0; }
 
-  .lang-btn {
-    font-family: 'Exo 2', sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 6px 14px;
-    border: none;
-    border-radius: 6px;
+  .lang-slider {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-hover);
+    border-radius: 8px;
     cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background 0.3s;
   }
 
-  .lang-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .lang-btn-remove {
-    background: rgba(248, 113, 113, 0.15);
-    color: var(--danger);
+  .lang-slider::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 12px; height: 12px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: left 0.3s;
   }
 
-  .lang-btn-remove:hover:not(:disabled) { background: rgba(248, 113, 113, 0.3); }
+  .lang-switch input:checked + .lang-slider { background: var(--success); }
+  .lang-switch input:checked + .lang-slider::after { left: 14px; }
+  .lang-switch input:disabled + .lang-slider { opacity: 0.4; cursor: not-allowed; }
 
-  .lang-btn-install {
-    background: rgba(96, 165, 250, 0.15);
-    color: var(--accent);
-  }
-
-  .lang-btn-install:hover:not(:disabled) { background: rgba(96, 165, 250, 0.3); }
-
-  .lang-add-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .lang-add-row select {
-    flex: 1;
-    padding: 10px 12px;
+  .lang-search {
+    width: 100%;
+    padding: 8px 12px;
     font-size: 14px;
-  }
-
-  .lang-add-row button {
-    padding: 10px 20px;
-    font-size: 14px;
-    font-weight: 700;
-    background: var(--accent);
-    color: #000;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border: 1px solid var(--surface-hover);
+    border-radius: 8px;
+    color: var(--text);
     font-family: 'Exo 2', sans-serif;
   }
 
-  .lang-add-row button:hover { opacity: 0.9; }
-  .lang-add-row button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .lang-status {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-top: 8px;
-    font-style: italic;
-  }
+  .lang-search::placeholder { color: var(--text-dim); }
 
   .qr-section {
     display: flex;
@@ -374,12 +370,41 @@
     color: var(--text-dim);
     text-align: center;
   }
+
+  .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .theme-btn {
+    background: var(--surface);
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    line-height: 0;
+  }
+
+  .theme-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+  html.light .collapse-btn { background: #d1d5db; color: #4b5563; }
+  html.light .collapse-btn:hover { background: #9ca3af; color: #1a1a2e; }
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>OpenEar Admin</h1>
-  <p class="subtitle">Server-side audio capture and transcription control</p>
+  <div class="admin-header">
+    <div>
+      <h1>OpenEar Admin</h1>
+      <p class="subtitle">Server-side audio capture and transcription control</p>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" id="theme-btn">
+      <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+  </div>
 
   <div id="server-down">
     <div class="down-text">Server Unreachable</div>
@@ -419,18 +444,14 @@
   </div>
 
   <div class="card">
-    <h2>Translation Languages</h2>
-    <div id="lang-installed">
-      <p style="color: var(--text-dim); font-size: 14px;">Loading...</p>
+    <div class="card-header">
+      <h2>Client Languages</h2>
+      <button class="collapse-btn" id="lang-toggle" onclick="toggleLangSection()">Hide</button>
     </div>
-    <div class="lang-add-row">
-      <select id="lang-available">
-        <option value="">Loading languages...</option>
-      </select>
-      <button id="lang-install-btn" onclick="installLanguage()" disabled>Install</button>
+    <div id="lang-section">
+      <input type="text" class="lang-search" id="lang-search" placeholder="Search languages...">
+      <ul class="lang-list" id="lang-list"></ul>
     </div>
-    <div id="lang-status" class="lang-status"></div>
-    <div id="lang-clients" style="margin-top: 12px;"></div>
   </div>
 
   <div class="card">
@@ -464,11 +485,52 @@
       <span class="info-label">Server IP</span>
       <span class="info-value mono" id="server-ip">—</span>
     </div>
+    <div class="info-row">
+      <span class="info-label">Languages enabled</span>
+      <span class="info-value" id="lang-count">—</span>
+    </div>
   </div>
 </div>
 
 <script src="/static/qrcode.min.js"></script>
 <script>
+// ============================================================================
+// THEME TOGGLE (matches client page)
+// ============================================================================
+let theme = localStorage.getItem('openear-admin-theme') || 'dark';
+applyTheme(theme);
+
+function applyTheme(t) {
+  theme = t;
+  const iconDark = document.getElementById('theme-icon-dark');
+  const iconLight = document.getElementById('theme-icon-light');
+  if (t === 'light') {
+    document.documentElement.classList.add('light');
+    iconDark.style.display = 'none';
+    iconLight.style.display = '';
+  } else {
+    document.documentElement.classList.remove('light');
+    iconDark.style.display = '';
+    iconLight.style.display = 'none';
+  }
+  localStorage.setItem('openear-admin-theme', t);
+}
+
+function toggleTheme() {
+  applyTheme(theme === 'dark' ? 'light' : 'dark');
+}
+
+// ============================================================================
+// SECTION TOGGLES
+// ============================================================================
+function toggleLangSection() {
+  const section = document.getElementById('lang-section');
+  const btn = document.getElementById('lang-toggle');
+  const hidden = section.style.display === 'none';
+  section.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
+
 const deviceSelect = document.getElementById('device-select');
 const captureToggle = document.getElementById('capture-toggle');
 const toggleStatus = document.getElementById('toggle-status');
@@ -613,9 +675,6 @@ async function updateStatus() {
       deviceName.textContent = 'None';
     }
 
-    // Update language breakdown
-    updateLanguageClients(data.languages);
-
     // Audio level meter
     if (data.capturing) {
       meterContainer.style.display = 'block';
@@ -638,121 +697,75 @@ async function updateStatus() {
 // LANGUAGE MANAGEMENT
 // ============================================================================
 
-const langInstalled = document.getElementById('lang-installed');
-const langAvailable = document.getElementById('lang-available');
-const langInstallBtn = document.getElementById('lang-install-btn');
-const langStatusEl = document.getElementById('lang-status');
-const langClientsEl = document.getElementById('lang-clients');
+const langCount = document.getElementById('lang-count');
+const langList = document.getElementById('lang-list');
+const langSearch = document.getElementById('lang-search');
+
+let allLanguages = [];
+let enabledSet = new Set();
 
 async function loadLanguages() {
   try {
     const res = await fetch('/api/languages');
     const data = await res.json();
-
-    // Render installed languages
-    if (data.installed.length === 0) {
-      langInstalled.innerHTML = '<p style="color: var(--text-dim); font-size: 14px;">No translation languages installed. English captions only.</p>';
-    } else {
-      let html = '<ul class="lang-list">';
-      data.installed.forEach(lang => {
-        html += `<li class="lang-item">
-          <span class="lang-name">${lang.name} <span style="color: var(--text-dim); font-size: 13px;">(${lang.code})</span></span>
-          <button class="lang-btn lang-btn-remove" onclick="removeLanguage('${lang.code}')">Remove</button>
-        </li>`;
-      });
-      html += '</ul>';
-      langInstalled.innerHTML = html;
-    }
-
-    // Populate available languages dropdown
-    langAvailable.innerHTML = '';
-    if (data.available.length === 0) {
-      langAvailable.innerHTML = '<option value="">All languages installed</option>';
-      langInstallBtn.disabled = true;
-    } else {
-      langAvailable.innerHTML = '<option value="">Select a language...</option>';
-      data.available.forEach(lang => {
-        const opt = document.createElement('option');
-        opt.value = lang.code;
-        opt.textContent = `${lang.name} (${lang.code})`;
-        langAvailable.appendChild(opt);
-      });
-      langInstallBtn.disabled = false;
-    }
+    allLanguages = data.installed || [];
+    enabledSet = new Set(data.enabled || ['en']);
+    renderLanguages();
   } catch (e) {
-    langInstalled.innerHTML = '<p style="color: var(--danger); font-size: 14px;">Failed to load languages</p>';
+    langCount.textContent = 'Error';
   }
 }
 
-async function installLanguage() {
-  const code = langAvailable.value;
-  if (!code) return;
+function renderLanguages() {
+  const filter = langSearch.value.toLowerCase();
+  langList.innerHTML = '';
 
-  const name = langAvailable.options[langAvailable.selectedIndex].textContent;
-  langInstallBtn.disabled = true;
-  langStatusEl.textContent = `Downloading ${name}... This may take a minute.`;
+  // English first, always
+  const english = {code: 'en', name: 'English'};
+  const filtered = allLanguages.filter(l => l.name.toLowerCase().includes(filter));
 
+  // Build English row (always on, locked)
+  if ('english'.includes(filter)) {
+    const li = document.createElement('li');
+    li.className = 'lang-item';
+    li.innerHTML = `<span class="lang-name disabled">English (always on)</span>
+      <label class="lang-switch"><input type="checkbox" checked disabled><span class="lang-slider"></span></label>`;
+    langList.appendChild(li);
+  }
+
+  filtered.forEach(lang => {
+    const li = document.createElement('li');
+    li.className = 'lang-item';
+    const checked = enabledSet.has(lang.code);
+    li.innerHTML = `<span class="lang-name">${lang.name}</span>
+      <label class="lang-switch"><input type="checkbox" ${checked ? 'checked' : ''} data-code="${lang.code}"><span class="lang-slider"></span></label>`;
+    li.querySelector('input').addEventListener('change', (e) => toggleLang(lang.code, e.target.checked));
+    langList.appendChild(li);
+  });
+
+  langCount.textContent = enabledSet.size;
+}
+
+async function toggleLang(code, enable) {
+  const endpoint = enable ? '/api/languages/enable' : '/api/languages/disable';
   try {
-    const res = await fetch('/api/languages/install', {
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code}),
     });
     const data = await res.json();
-
-    if (data.error) {
-      langStatusEl.textContent = 'Error: ' + data.error;
-    } else {
-      langStatusEl.textContent = `${name} installed successfully!`;
-      setTimeout(() => { langStatusEl.textContent = ''; }, 3000);
-      await loadLanguages();
+    if (data.enabled) {
+      enabledSet = new Set(data.enabled);
+      langCount.textContent = enabledSet.size;
     }
   } catch (e) {
-    langStatusEl.textContent = 'Failed to install language pack.';
-  } finally {
-    langInstallBtn.disabled = false;
+    // Revert checkbox on error
+    loadLanguages();
   }
 }
 
-async function removeLanguage(code) {
-  if (!confirm(`Remove translation for "${code}"? Connected clients using this language will switch back to English.`)) return;
-
-  langStatusEl.textContent = `Removing ${code}...`;
-
-  try {
-    const res = await fetch('/api/languages/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      langStatusEl.textContent = 'Error: ' + data.error;
-    } else {
-      langStatusEl.textContent = `Removed ${code}.`;
-      setTimeout(() => { langStatusEl.textContent = ''; }, 3000);
-      await loadLanguages();
-    }
-  } catch (e) {
-    langStatusEl.textContent = 'Failed to remove language pack.';
-  }
-}
-
-// Show language breakdown in status updates
-function updateLanguageClients(langCounts) {
-  if (!langCounts || Object.keys(langCounts).length === 0) {
-    langClientsEl.innerHTML = '';
-    return;
-  }
-
-  const parts = Object.entries(langCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([lang, count]) => `<span style="font-weight:600;">${count}</span> ${lang.toUpperCase()}`)
-    .join(', ');
-
-  langClientsEl.innerHTML = `<div style="font-size: 13px; color: var(--text-dim);">Connected: ${parts}</div>`;
-}
+langSearch.addEventListener('input', renderLanguages);
 
 // Init
 loadServerInfo();

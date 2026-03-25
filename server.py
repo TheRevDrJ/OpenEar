@@ -2,7 +2,7 @@
 # Copyright (c) 2026 TheRevDrJ
 # Licensed under AGPL-3.0 — see LICENSE file for details
 """
-OpenEar v0.4 - Live Speech-to-Text Captioning Server with Translation
+OpenEar v0.5 - Live Speech-to-Text Captioning Server with NLLB Translation
 
 Architecture overview:
   1. A sounddevice InputStream continuously captures raw audio from a chosen input device
@@ -16,7 +16,7 @@ The admin page (admin.html) controls capture start/stop and device selection via
 The client page (index.html) connects via WebSocket and renders incoming text.
 """
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 import os
 import sys
@@ -66,15 +66,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # ============================================================================
-# TRANSLATION (Argos Translate)
+# TRANSLATION (NLLB-200 via CTranslate2)
 # ============================================================================
-# Argos Translate provides offline machine translation. Language packs are
-# ~50MB each and downloaded on demand. Translation runs on CPU, which is fine
-# since it only takes ~100ms per sentence and doesn't compete with the GPU
-# running Whisper.
+# Meta's NLLB-200 (No Language Left Behind) provides high-quality offline
+# translation across 200 languages. We use the 3.3B parameter model quantized
+# to INT8 via CTranslate2, which uses ~3GB VRAM on GPU or runs on CPU.
+# This is the same CTranslate2 engine that powers faster-whisper, so no new
+# runtime dependencies are needed.
 
-import argostranslate.package
-import argostranslate.translate
+import ctranslate2
+import sentencepiece as spm
 
 # ============================================================================
 # CONFIGURATION
@@ -131,13 +132,80 @@ model = WhisperModel(
 logger.info(f"Model loaded on {DEVICE.upper()} in {time.time() - t0:.1f}s")
 
 # ============================================================================
+# NLLB TRANSLATION MODEL
+# ============================================================================
+# NLLB uses BCP-47-style codes with script suffixes (e.g., kor_Hang for Korean).
+# We map simple ISO 639-1 codes (what clients send) to NLLB's format.
+
+NLLB_LANG_MAP = {
+    "af": ("afr_Latn", "Afrikaans"), "am": ("amh_Ethi", "Amharic"),
+    "ar": ("arb_Arab", "Arabic"), "az": ("azj_Latn", "Azerbaijani"),
+    "be": ("bel_Cyrl", "Belarusian"), "bg": ("bul_Cyrl", "Bulgarian"),
+    "bn": ("ben_Beng", "Bengali"), "bs": ("bos_Latn", "Bosnian"),
+    "ca": ("cat_Latn", "Catalan"), "cs": ("ces_Latn", "Czech"),
+    "cy": ("cym_Latn", "Welsh"), "da": ("dan_Latn", "Danish"),
+    "de": ("deu_Latn", "German"), "el": ("ell_Grek", "Greek"),
+    "es": ("spa_Latn", "Spanish"), "et": ("est_Latn", "Estonian"),
+    "fa": ("pes_Arab", "Persian"), "fi": ("fin_Latn", "Finnish"),
+    "fr": ("fra_Latn", "French"), "ga": ("gle_Latn", "Irish"),
+    "gl": ("glg_Latn", "Galician"), "gu": ("guj_Gujr", "Gujarati"),
+    "ha": ("hau_Latn", "Hausa"), "he": ("heb_Hebr", "Hebrew"),
+    "hi": ("hin_Deva", "Hindi"), "hr": ("hrv_Latn", "Croatian"),
+    "hu": ("hun_Latn", "Hungarian"), "hy": ("hye_Armn", "Armenian"),
+    "id": ("ind_Latn", "Indonesian"), "ig": ("ibo_Latn", "Igbo"),
+    "is": ("isl_Latn", "Icelandic"), "it": ("ita_Latn", "Italian"),
+    "ja": ("jpn_Jpan", "Japanese"), "ka": ("kat_Geor", "Georgian"),
+    "kk": ("kaz_Cyrl", "Kazakh"), "km": ("khm_Khmr", "Khmer"),
+    "kn": ("kan_Knda", "Kannada"), "ko": ("kor_Hang", "Korean"),
+    "lo": ("lao_Laoo", "Lao"), "lt": ("lit_Latn", "Lithuanian"),
+    "lv": ("lvs_Latn", "Latvian"), "mk": ("mkd_Cyrl", "Macedonian"),
+    "ml": ("mal_Mlym", "Malayalam"), "mn": ("khk_Cyrl", "Mongolian"),
+    "mr": ("mar_Deva", "Marathi"), "ms": ("zsm_Latn", "Malay"),
+    "my": ("mya_Mymr", "Myanmar"), "ne": ("npi_Deva", "Nepali"),
+    "nl": ("nld_Latn", "Dutch"), "no": ("nob_Latn", "Norwegian"),
+    "pa": ("pan_Guru", "Punjabi"), "pl": ("pol_Latn", "Polish"),
+    "pt": ("por_Latn", "Portuguese"), "ro": ("ron_Latn", "Romanian"),
+    "ru": ("rus_Cyrl", "Russian"), "si": ("sin_Sinh", "Sinhala"),
+    "sk": ("slk_Latn", "Slovak"), "sl": ("slv_Latn", "Slovenian"),
+    "so": ("som_Latn", "Somali"), "sq": ("als_Latn", "Albanian"),
+    "sr": ("srp_Cyrl", "Serbian"), "sv": ("swe_Latn", "Swedish"),
+    "sw": ("swh_Latn", "Swahili"), "ta": ("tam_Taml", "Tamil"),
+    "te": ("tel_Telu", "Telugu"), "tg": ("tgk_Cyrl", "Tajik"),
+    "th": ("tha_Thai", "Thai"), "tl": ("tgl_Latn", "Filipino"),
+    "tr": ("tur_Latn", "Turkish"), "uk": ("ukr_Cyrl", "Ukrainian"),
+    "ur": ("urd_Arab", "Urdu"), "uz": ("uzn_Latn", "Uzbek"),
+    "vi": ("vie_Latn", "Vietnamese"), "yo": ("yor_Latn", "Yoruba"),
+    "zh": ("zho_Hans", "Chinese (Simplified)"),
+    "zu": ("zul_Latn", "Zulu"),
+}
+
+NLLB_MODEL_DIR = str(Path.home() / ".cache" / "nllb-3.3b-ct2")
+
+# Load NLLB translation model
+logger.info("Loading NLLB-200 translation model...")
+t0 = time.time()
+try:
+    nllb_translator = ctranslate2.Translator(
+        NLLB_MODEL_DIR,
+        device=DEVICE,
+        compute_type="int8",
+    )
+    nllb_sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
+    logger.info(f"NLLB translation model loaded in {time.time() - t0:.1f}s")
+except Exception as e:
+    logger.warning(f"NLLB translation model not found: {e}")
+    logger.warning("Translation will be unavailable. Run download_models.py to install.")
+    nllb_translator = None
+    nllb_sp = None
+
+# ============================================================================
 # SERVER STATE
 # ============================================================================
 # These globals track the current state of the server. They're modified by
 # the API endpoints and read by the admin page's status polling.
 
 # Client tracking: maps each WebSocket to its preferred language code.
-# "en" means no translation needed. Any other code triggers Argos translation.
+# "en" means no translation needed. Any other code triggers NLLB translation.
 client_languages: dict[WebSocket, str] = {}  # {websocket: "en", websocket2: "ko", ...}
 connected_clients: set[WebSocket] = set()   # All active WebSocket connections
 is_capturing = False                         # Whether we're currently recording audio
@@ -149,6 +217,33 @@ capture_stream: sd.InputStream | None = None # The active sounddevice input stre
 transcription_task: asyncio.Task | None = None  # The running async transcription loop
 current_audio_level: float = 0.0             # RMS audio level (0.0-1.0) for the admin meter
 audio_clipping: bool = False                 # True if audio peaks are hitting the ceiling
+
+# ============================================================================
+# ENABLED LANGUAGES (admin-controlled visibility)
+# ============================================================================
+# Admins toggle which languages appear on client devices. Persisted to disk.
+# English is always enabled and cannot be disabled.
+
+LANGUAGES_FILE = Path(__file__).parent / "languages.json"
+
+def load_enabled_languages() -> set[str]:
+    """Load enabled language codes from disk, defaulting to English only."""
+    try:
+        with open(LANGUAGES_FILE) as f:
+            data = json.load(f)
+            codes = set(data.get("enabled", ["en"]))
+            codes.add("en")  # English always enabled
+            return codes
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"en"}
+
+def save_enabled_languages(codes: set[str]):
+    """Persist enabled language codes to disk."""
+    codes.add("en")  # English always enabled
+    with open(LANGUAGES_FILE, "w") as f:
+        json.dump({"enabled": sorted(codes)}, f, indent=2)
+
+enabled_languages: set[str] = load_enabled_languages()
 
 
 # ============================================================================
@@ -301,35 +396,46 @@ def transcribe_audio_chunk(audio_data: np.ndarray) -> str:
                 pass
 
 
-def get_installed_languages() -> list[dict]:
-    """Return a list of installed Argos Translate language packs.
+def get_available_languages() -> list[dict]:
+    """Return all languages NLLB can translate to.
 
-    Each entry has from_code, to_code, and from/to names.
-    We only care about en -> X packages (translating FROM English).
+    NLLB supports all 200 languages with a single model — no per-language
+    packs to install. We expose a curated subset of the most useful ones
+    for church contexts.
     """
-    installed = argostranslate.package.get_installed_packages()
-    languages = []
-    seen = set()
-    for pkg in installed:
-        if pkg.from_code == "en" and pkg.to_code not in seen:
-            seen.add(pkg.to_code)
-            languages.append({
-                "code": pkg.to_code,
-                "name": pkg.to_name,
-            })
-    languages.sort(key=lambda x: x["name"])
+    languages = [
+        {"code": code, "name": name}
+        for code, (nllb_code, name) in sorted(NLLB_LANG_MAP.items(), key=lambda x: x[1][1])
+    ]
     return languages
 
 
 def translate_text(text: str, target_lang: str) -> str:
-    """Translate English text to the target language using Argos Translate.
+    """Translate English text to the target language using NLLB-200.
 
     Returns the original text if translation fails or target is English.
     """
     if not text or target_lang == "en":
         return text
+    if not nllb_translator or not nllb_sp:
+        return text
+
+    nllb_code = NLLB_LANG_MAP.get(target_lang, (None, None))[0]
+    if not nllb_code:
+        logger.warning(f"No NLLB mapping for language code: {target_lang}")
+        return text
+
     try:
-        return argostranslate.translate.translate(text, "en", target_lang)
+        tokens = nllb_sp.encode(text, out_type=str)
+        tokens = ["eng_Latn"] + tokens + ["</s>"]
+        results = nllb_translator.translate_batch(
+            [tokens],
+            target_prefix=[[nllb_code]],
+            max_batch_size=1,
+            beam_size=4,
+        )
+        output_tokens = results[0].hypotheses[0][1:]  # skip language token
+        return nllb_sp.decode(output_tokens)
     except Exception as e:
         logger.warning(f"Translation to {target_lang} failed: {e}")
         return text
@@ -562,107 +668,41 @@ async def api_status():
 # ============================================================================
 # LANGUAGE / TRANSLATION API ENDPOINTS
 # ============================================================================
-
-# Cache the Argos package index fetch — only try once per server session.
-# If it fails (no internet, no SSL certs), installed languages still work;
-# you just can't browse new ones to download until the server restarts.
-_package_index_updated = False
-
-def _update_package_index_once():
-    global _package_index_updated
-    if _package_index_updated:
-        return
-    try:
-        argostranslate.package.update_package_index()
-        _package_index_updated = True
-    except Exception as e:
-        _package_index_updated = True  # Don't retry on failure
-        logger.warning(f"Could not fetch language package index: {e}")
-
+# NLLB handles all 200 languages with a single model — no per-language packs
+# to install or remove. The API just returns the available language list.
 
 @app.get("/api/languages")
 async def list_languages():
-    """Return installed translation language packs and available ones for download."""
-    installed = get_installed_languages()
-    installed_codes = {l["code"] for l in installed}
+    """Return all NLLB languages and which ones are enabled for clients.
 
-    # Get all available en -> X packages that aren't already installed
-    _update_package_index_once()
-    try:
-        available = argostranslate.package.get_available_packages()
-        downloadable = []
-        seen = set()
-        for pkg in available:
-            if pkg.from_code == "en" and pkg.to_code not in installed_codes and pkg.to_code not in seen:
-                seen.add(pkg.to_code)
-                downloadable.append({
-                    "code": pkg.to_code,
-                    "name": pkg.to_name,
-                })
-        downloadable.sort(key=lambda x: x["name"])
-    except Exception as e:
-        logger.warning(f"Failed to fetch available packages: {e}")
-        downloadable = []
-
+    'installed' = all available languages (for admin toggle list)
+    'enabled' = languages visible to clients (admin-controlled)
+    """
+    available = get_available_languages()
     return {
-        "installed": installed,
-        "available": downloadable,
+        "installed": available,
+        "enabled": sorted(enabled_languages),
     }
 
+@app.post("/api/languages/enable")
+async def enable_language(body: dict):
+    """Enable a language so it appears on client devices."""
+    code = body.get("code", "")
+    if code not in NLLB_LANG_MAP and code != "en":
+        return {"error": f"Unknown language code: {code}"}, 400
+    enabled_languages.add(code)
+    save_enabled_languages(enabled_languages)
+    return {"enabled": sorted(enabled_languages)}
 
-@app.post("/api/languages/install")
-async def install_language(body: dict):
-    """Download and install a language pack for en -> target_lang.
-
-    This downloads ~50MB per language and may take a few seconds.
-    """
-    target = body.get("code")
-    if not target:
-        return {"error": "language code required"}
-
-    try:
-        _update_package_index_once()
-        available = argostranslate.package.get_available_packages()
-        pkg = next(
-            (p for p in available if p.from_code == "en" and p.to_code == target),
-            None
-        )
-        if not pkg:
-            return {"error": f"No package found for en -> {target}"}
-
-        logger.info(f"Downloading language pack: en -> {target}...")
-        download_path = pkg.download()
-        argostranslate.package.install_from_path(download_path)
-        logger.info(f"Language pack installed: en -> {target}")
-
-        return {"status": "installed", "code": target}
-    except Exception as e:
-        logger.error(f"Failed to install language pack en -> {target}: {e}")
-        return {"error": str(e)}
-
-
-@app.post("/api/languages/remove")
-async def remove_language(body: dict):
-    """Remove an installed language pack."""
-    target = body.get("code")
-    if not target:
-        return {"error": "language code required"}
-
-    try:
-        installed = argostranslate.package.get_installed_packages()
-        pkg = next(
-            (p for p in installed if p.from_code == "en" and p.to_code == target),
-            None
-        )
-        if not pkg:
-            return {"error": f"Package en -> {target} not found"}
-
-        argostranslate.package.uninstall(pkg)
-        logger.info(f"Language pack removed: en -> {target}")
-        return {"status": "removed", "code": target}
-    except Exception as e:
-        logger.error(f"Failed to remove language pack en -> {target}: {e}")
-        return {"error": str(e)}
+@app.post("/api/languages/disable")
+async def disable_language(body: dict):
+    """Disable a language so it no longer appears on client devices."""
+    code = body.get("code", "")
+    if code == "en":
+        return {"error": "English cannot be disabled"}, 400
+    enabled_languages.discard(code)
+    save_enabled_languages(enabled_languages)
+    return {"enabled": sorted(enabled_languages)}
 
 
 @app.get("/api/server-info")
@@ -725,12 +765,13 @@ async def websocket_captions(websocket: WebSocket):
     logger.info(f"Client connected ({len(connected_clients)} total)")
 
     # Tell the new client whether captioning is currently active,
-    # and send the list of available languages for the dropdown
-    installed = get_installed_languages()
+    # and send only the admin-enabled languages for the dropdown
+    all_langs = get_available_languages()
+    visible = [l for l in all_langs if l["code"] in enabled_languages]
     await websocket.send_json({"type": "status", "capturing": is_capturing})
     await websocket.send_json({
         "type": "languages",
-        "languages": [{"code": "en", "name": "English"}] + installed,
+        "languages": [{"code": "en", "name": "English"}] + visible,
     })
 
     try:
