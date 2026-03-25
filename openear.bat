@@ -46,7 +46,7 @@ for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='p
 ping 127.0.0.1 -n 2 > nul
 
 echo Starting OpenEar...
-start "" /b pythonw "%SERVER_SCRIPT%" > nul 2>&1
+start "" /b pythonw "%SERVER_SCRIPT%" %~2 > nul 2>&1
 
 :: Give the model time to load and bind the port (slower GPUs need ~20s)
 ping 127.0.0.1 -n 21 > nul
@@ -153,7 +153,7 @@ echo   Starting OpenEar in verbose mode...
 echo   Logs will appear below. Press Ctrl+C to stop.
 echo   ================================================
 echo.
-python "%SERVER_SCRIPT%"
+python "%SERVER_SCRIPT%" %~2
 exit /b 0
 
 :: ============================================================================
@@ -226,6 +226,10 @@ echo     log        Follow the log file in real time
 echo     devices    List available audio input devices
 echo     version    Show the OpenEar version
 echo     help       Show this help message
+echo.
+echo   Flags:
+echo     --log-text   Log transcription and translation text to text-logs/
+echo                  Add to start or verbose: openear verbose --log-text
 echo.
 echo   Examples:
 echo     openear start       Launch headless, ready for clients

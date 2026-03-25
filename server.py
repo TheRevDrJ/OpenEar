@@ -81,6 +81,13 @@ import sentencepiece as spm
 # CONFIGURATION
 # ============================================================================
 
+# Text logging — enabled with --log-text flag. Writes transcription and
+# translation output to separate files for quality evaluation.
+LOG_TEXT = "--log-text" in sys.argv
+TEXT_LOG_DIR = Path(__file__).parent / "text-logs"
+if LOG_TEXT:
+    TEXT_LOG_DIR.mkdir(exist_ok=True)
+
 MODEL_SIZE = "large-v3"     # Whisper model variant — large-v3 is the most accurate
 DEVICE = "cuda"             # "cuda" for GPU acceleration, "cpu" for fallback
 COMPUTE_TYPE = "float16"    # Half-precision floats — faster on GPU, uses less VRAM
@@ -458,6 +465,11 @@ async def broadcast(message: dict):
         translation_cache: dict[str, str] = {"en": message["text"]}
         english_text = message["text"]
 
+        # Log original English text
+        if LOG_TEXT:
+            with open(TEXT_LOG_DIR / "source-en.txt", "a", encoding="utf-8") as f:
+                f.write(english_text + "\n")
+
         for client in connected_clients:
             lang = client_languages.get(client, "en")
             try:
@@ -468,6 +480,11 @@ async def broadcast(message: dict):
                         None, translate_text, english_text, lang
                     )
                     translation_cache[lang] = translated
+
+                    # Log translated text
+                    if LOG_TEXT:
+                        with open(TEXT_LOG_DIR / f"translated-{lang}.txt", "a", encoding="utf-8") as f:
+                            f.write(translated + "\n")
 
                 await client.send_json({
                     "type": "transcript",
@@ -862,4 +879,6 @@ if __name__ == "__main__":
     log_config = None if headless else uvicorn.config.LOGGING_CONFIG
 
     logger.info(f"Server running at http://0.0.0.0:{PORT}")
+    if LOG_TEXT:
+        logger.info(f"Text logging enabled — output to {TEXT_LOG_DIR}")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info", log_config=log_config)
