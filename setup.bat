@@ -206,22 +206,14 @@ if %errorlevel% neq 0 (
 )
 echo   [OK] faster-whisper
 
-echo   Installing argostranslate...
-python -m pip install argostranslate --quiet
+echo   Installing sentencepiece (for NLLB translation)...
+python -m pip install sentencepiece --quiet
 if %errorlevel% neq 0 (
-    echo   [FAIL] argostranslate install failed
+    echo   [FAIL] sentencepiece install failed
     pause
     exit /b 1
 )
-echo   [OK] argostranslate
-
-echo   Installing SSL certificate support...
-python -m pip install pip-system-certs --quiet
-if %errorlevel% equ 0 (
-    echo   [OK] SSL certificates - uses Windows cert store
-) else (
-    echo   [WARN] pip-system-certs failed. Language pack downloads may not work.
-)
+echo   [OK] sentencepiece
 
 :: ----------------------------------------------------------------------------
 :: CUDA GPU acceleration (optional but recommended)
@@ -250,16 +242,83 @@ if %errorlevel% equ 0 (
 :: Pre-download Whisper model
 :: ----------------------------------------------------------------------------
 echo.
-echo   Downloading Whisper large-v3 model (~3GB, one-time download)...
-echo   This will take a few minutes depending on your internet speed.
+echo   Downloading AI models (~6GB total, one-time download)...
+echo   This will take several minutes depending on your internet speed.
 echo.
 
-python "%SCRIPT_DIR%download_model.py" 2>&1
+python "%SCRIPT_DIR%download_models.py" 2>&1
 if %errorlevel% equ 0 (
-    echo   [OK] Whisper model downloaded
+    echo   [OK] All models downloaded
 ) else (
-    echo   [WARN] Model download failed. It will download on first server start.
+    echo   [WARN] Model download failed. Models will download on first server start.
 )
+
+:: ----------------------------------------------------------------------------
+:: Remote management tools (optional, --remote flag)
+:: ----------------------------------------------------------------------------
+if /i not "%1"=="--remote" goto remote_done
+
+echo.
+echo   ============================================
+echo     Remote Management Tools
+echo   ============================================
+echo.
+
+:: Install Git
+git --version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   [OK] Git already installed
+) else (
+    echo   Installing Git...
+    winget install --id Git.Git -e --silent >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo   [OK] Git installed
+    ) else (
+        echo   [WARN] Git install failed. Install manually from https://git-scm.com
+    )
+)
+
+:: Install Tailscale
+tailscale version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   [OK] Tailscale already installed
+) else (
+    echo   Installing Tailscale...
+    winget install --id tailscale.tailscale -e --silent >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo   [OK] Tailscale installed
+        echo   NOTE: Open Tailscale from the Start menu and sign in to activate.
+    ) else (
+        echo   [WARN] Tailscale install failed. Install manually from https://tailscale.com/download
+    )
+)
+
+:: Enable OpenSSH Server
+sc query sshd >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   [OK] OpenSSH Server already installed
+) else (
+    echo   Enabling OpenSSH Server...
+    powershell -Command "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0" >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo   [OK] OpenSSH Server installed
+    ) else (
+        echo   [WARN] OpenSSH Server install failed.
+    )
+)
+
+:: Start and auto-start SSH
+powershell -Command "Start-Service sshd; Set-Service -Name sshd -StartupType Automatic" >nul 2>&1
+echo   [OK] SSH service started and set to auto-start
+
+:: SSH firewall rule
+netsh advfirewall firewall show rule name="OpenSSH-Server" >nul 2>&1
+if %errorlevel% neq 0 (
+    netsh advfirewall firewall add rule name="OpenSSH-Server" dir=in action=allow protocol=TCP localport=22 >nul 2>&1
+    echo   [OK] SSH firewall rule added
+)
+
+:remote_done
 
 :: ----------------------------------------------------------------------------
 :: Done
