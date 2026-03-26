@@ -60,7 +60,7 @@ except (ImportError, Exception):
 
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
+import onnx_asr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -88,11 +88,7 @@ TEXT_LOG_DIR = Path(__file__).parent / "text-logs"
 if LOG_TEXT:
     TEXT_LOG_DIR.mkdir(exist_ok=True)
 
-MODEL_SIZE = "large-v3"     # Whisper model variant — large-v3 is the most accurate
-DEVICE = "cuda"             # "cuda" for GPU acceleration, "cpu" for fallback
-COMPUTE_TYPE = "float16"    # Half-precision floats — faster on GPU, uses less VRAM
-BEAM_SIZE = 5               # Beam search width — higher = more accurate but slower
-LANGUAGE = "en"             # Fixed to English (skips language detection overhead)
+ASR_MODEL = "nemo-parakeet-tdt-0.6b-v2"  # NVIDIA Parakeet — natively punctuated output
 PORT = 80                   # Default HTTP port — no :port needed in URLs
 SAMPLE_RATE = 16000         # 16kHz — what Whisper expects. Audio is resampled to this.
 CHUNK_DURATION = 3          # Seconds of audio to accumulate before transcribing.
@@ -125,18 +121,13 @@ logger.addHandler(_file)
 
 app = FastAPI(title="OpenEar")
 
-# Load the Whisper model into GPU memory at startup. This takes a few seconds
-# but only happens once. The model stays loaded for the lifetime of the server.
-# On first run, it downloads ~3GB of model weights to the cache directory.
-logger.info(f"Loading Whisper {MODEL_SIZE} model (first run downloads ~3GB)...")
+# Load the Parakeet ASR model at startup. Runs on CPU — fast enough for real-time
+# transcription and frees up GPU VRAM entirely for the translation model.
+# On first run, it downloads ~2.5GB of model weights from HuggingFace.
+logger.info(f"Loading Parakeet ASR model (first run downloads ~2.5GB)...")
 t0 = time.time()
-model = WhisperModel(
-    MODEL_SIZE,
-    device=DEVICE,
-    compute_type=COMPUTE_TYPE,
-    download_root=str(Path.home() / ".cache" / "whisper-models"),
-)
-logger.info(f"Model loaded on {DEVICE.upper()} in {time.time() - t0:.1f}s")
+asr_model = onnx_asr.load_model(ASR_MODEL)
+logger.info(f"ASR model loaded in {time.time() - t0:.1f}s")
 
 # ============================================================================
 # NLLB TRANSLATION MODEL
@@ -194,7 +185,7 @@ t0 = time.time()
 try:
     nllb_translator = ctranslate2.Translator(
         NLLB_MODEL_DIR,
-        device=DEVICE,
+        device="cuda",
         compute_type="int8",
     )
     nllb_sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
@@ -339,68 +330,18 @@ def audio_callback(indata: np.ndarray, frames: int, time_info, status):
 # ============================================================================
 
 def transcribe_audio_chunk(audio_data: np.ndarray) -> str:
-    """Convert a chunk of raw audio into text using Whisper.
+    """Convert a chunk of raw audio into text using Parakeet-TDT.
 
-    faster-whisper requires a file path (not raw bytes), so we:
-    1. Convert the float32 numpy array to 16-bit PCM (standard WAV format)
-    2. Write it to a temporary .wav file
-    3. Run Whisper inference on it
-    4. Clean up the temp file
-
-    VAD (Voice Activity Detection) is enabled to skip silent segments,
-    which dramatically reduces hallucination on quiet audio. Without VAD,
-    Whisper tends to "hear" words in silence.
-
-    condition_on_previous_text=False prevents Whisper from using its own
-    prior output as context, which can cause it to get stuck in loops
-    or carry forward mistakes.
+    Parakeet accepts numpy arrays directly — no temp files needed.
+    It produces natively punctuated, capitalized text, which is
+    critical for downstream translation quality.
     """
-    tmp_path = None
     try:
-        # float32 [-1.0, 1.0] → int16 [-32767, 32767] (standard PCM encoding)
-        pcm = (audio_data * 32767).astype(np.int16)
-
-        # Build a WAV file in memory, then write to disk
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)          # Mono
-            wf.setsampwidth(2)          # 2 bytes per sample (16-bit)
-            wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(pcm.tobytes())
-
-        # Write to a temp file (faster-whisper needs a file path)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(buf.getvalue())
-            tmp_path = f.name
-
-        # Run Whisper inference
-        segments, info = model.transcribe(
-            tmp_path,
-            beam_size=BEAM_SIZE,
-            language=LANGUAGE,
-            vad_filter=True,            # Skip silent regions
-            vad_parameters=dict(
-                min_silence_duration_ms=300,  # How long silence must be to split
-                speech_pad_ms=200,            # Padding around detected speech
-            ),
-            condition_on_previous_text=False,  # Don't carry context between chunks
-        )
-
-        # Combine all detected segments into a single string
-        text = " ".join(seg.text.strip() for seg in segments).strip()
-        return text
-
+        result = asr_model.recognize(audio_data)
+        return result.text.strip() if hasattr(result, 'text') else str(result).strip()
     except Exception as e:
         logger.error(f"Transcription error: {e}")
         return ""
-
-    finally:
-        # Always clean up the temp file, even on error
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
 
 
 def get_available_languages() -> list[dict]:
@@ -840,8 +781,8 @@ async def health():
     """Simple health check endpoint for monitoring tools."""
     return {
         "status": "ok",
-        "model": MODEL_SIZE,
-        "device": DEVICE,
+        "model": ASR_MODEL,
+        "device": "cpu (ASR) / cuda (translation)",
         "capturing": is_capturing,
     }
 
