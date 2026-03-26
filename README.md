@@ -43,14 +43,33 @@ OpenEar is different:
 
 ## Hardware Requirements
 
-**Windows (tested, stable):**
-- A PC with an NVIDIA GPU (8GB+ VRAM recommended — an RTX 3060 12GB works great)
-- Windows 10/11 with Python 3.13+
-- A local network (church WiFi or a simple $30 router)
+### Minimum
+
+| Component | Spec |
+|-----------|------|
+| OS | Windows 10/11 (64-bit) |
+| CPU | AMD Ryzen 5 3600 / Intel Core i3-12100 |
+| RAM | 8 GB |
+| GPU | NVIDIA 6 GB VRAM (GTX 1660 Super, RTX 2060) |
+| Storage | 5 GB available |
+
+### Recommended
+
+| Component | Spec |
+|-----------|------|
+| OS | Windows 10/11 (64-bit) |
+| CPU | AMD Ryzen 5 5600X / Intel Core i5-12400 or better |
+| RAM | 16 GB |
+| GPU | NVIDIA 8 GB VRAM (RTX 4060, RTX 3070) |
+| Storage | 5 GB available |
+
+You also need a local network (church WiFi or a simple $30 router) for clients to connect.
+
+### Experimental Platforms
 
 **Mac Mini M4 (in testing):**
 - Base model M4 Mac Mini (16GB unified memory, $599)
-- Runs on CPU only (CTranslate2 has no Metal support) — medium model viable, large-v3 too slow
+- Transcription runs on CPU via Parakeet — translation limited without NVIDIA GPU
 - Status: v0.6 — actively being tested
 
 **NVIDIA Jetson Orin (in testing):**
@@ -67,10 +86,11 @@ This is the actual hardware OpenEar is developed and tested on:
 |-----------|------|
 | CPU | AMD Ryzen 7 5700X |
 | RAM | 64GB DDR4 |
-| GPU | NVIDIA RTX 3060 12GB |
+| GPU | NVIDIA RTX 4090 24GB |
 | Storage | 1TB NVMe M.2 |
 | OS | Windows 11 |
-| Whisper model | large-v3 |
+| ASR model | Parakeet-TDT-0.6B (CPU) |
+| Translation model | NLLB-200 3.3B INT8 (CUDA) |
 
 **Observed resource usage while server is running:**
 
