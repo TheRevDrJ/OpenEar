@@ -448,21 +448,31 @@ def translate_text(text: str, target_lang: str) -> str:
         return text
 
 
+# Translation sentence buffer — accumulates text fragments until a sentence
+# boundary is found, then translates complete sentences for better quality.
+# English clients still get real-time fragments with no delay.
+import re
+_sentence_end_re = re.compile(r'[.!?][\s]*$')
+_translation_buffer: str = ""
+
+
 async def broadcast(message: dict):
     """Send a JSON message to every connected WebSocket client.
 
-    For transcript messages, translates the text to each client's preferred
-    language before sending. English clients get the original text with no
-    added latency. Translation results are cached per-broadcast so that if
-    5 clients all want Spanish, we only translate once.
+    For transcript messages:
+    - English clients get text immediately (real-time, no delay)
+    - Translation clients receive buffered complete sentences for better quality.
+      Fragments accumulate until sentence-ending punctuation is detected, then
+      the full sentence is translated and sent. This adds a few seconds of latency
+      but dramatically improves translation accuracy (especially for languages
+      with different word order like Korean, Japanese, etc.)
 
     For non-transcript messages (status updates), sends identically to all.
     """
+    global _translation_buffer
     disconnected = set()
 
     if message.get("type") == "transcript":
-        # Cache translations so each language is only translated once per chunk
-        translation_cache: dict[str, str] = {"en": message["text"]}
         english_text = message["text"]
 
         # Log original English text
@@ -470,29 +480,37 @@ async def broadcast(message: dict):
             with open(TEXT_LOG_DIR / "source-en.txt", "a", encoding="utf-8") as f:
                 f.write(english_text + "\n")
 
-        for client in connected_clients:
-            lang = client_languages.get(client, "en")
-            try:
-                if lang not in translation_cache:
-                    # Run translation in executor to not block the event loop
-                    loop = asyncio.get_event_loop()
-                    translated = await loop.run_in_executor(
-                        None, translate_text, english_text, lang
-                    )
-                    translation_cache[lang] = translated
+        # Accumulate text until we have a complete sentence
+        _translation_buffer += (" " if _translation_buffer else "") + english_text
 
-                    # Log translated text
-                    if LOG_TEXT:
-                        with open(TEXT_LOG_DIR / f"translated-{lang}.txt", "a", encoding="utf-8") as f:
-                            f.write(translated + "\n")
+        if _sentence_end_re.search(_translation_buffer):
+            complete_text = _translation_buffer.strip()
+            _translation_buffer = ""
 
-                await client.send_json({
-                    "type": "transcript",
-                    "text": translation_cache[lang],
-                    "lang": lang,
-                })
-            except Exception:
-                disconnected.add(client)
+            # Translate once per language, send to all clients
+            translation_cache: dict[str, str] = {"en": complete_text}
+            for client in connected_clients:
+                lang = client_languages.get(client, "en")
+                try:
+                    if lang not in translation_cache:
+                        loop = asyncio.get_event_loop()
+                        translated = await loop.run_in_executor(
+                            None, translate_text, complete_text, lang
+                        )
+                        translation_cache[lang] = translated
+
+                        # Log translated text
+                        if LOG_TEXT:
+                            with open(TEXT_LOG_DIR / f"translated-{lang}.txt", "a", encoding="utf-8") as f:
+                                f.write(translated + "\n")
+
+                    await client.send_json({
+                        "type": "transcript",
+                        "text": translation_cache[lang],
+                        "lang": lang,
+                    })
+                except Exception:
+                    disconnected.add(client)
     else:
         # Non-transcript messages go to everyone identically
         for client in connected_clients:
@@ -585,7 +603,7 @@ def start_capture(device_id: int):
 
 def stop_capture():
     """Stop the audio stream and clean up."""
-    global is_capturing, capture_stream
+    global is_capturing, capture_stream, _translation_buffer
 
     is_capturing = False
     if capture_stream:
@@ -593,9 +611,10 @@ def stop_capture():
         capture_stream.close()
         capture_stream = None
 
-    # Discard any unprocessed audio
+    # Discard any unprocessed audio and translation buffer
     with buffer_lock:
         audio_buffer.clear()
+    _translation_buffer = ""
 
     logger.info("Audio capture stopped")
 
