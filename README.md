@@ -11,7 +11,7 @@
 
 ## What It Does
 
-OpenEar taps audio directly from your soundboard and uses [Whisper AI](https://github.com/SYSTRAN/faster-whisper) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any language your congregation needs using [Argos Translate](https://github.com/argosopentech/argos-translate), a local open-source translation engine.
+OpenEar taps audio directly from your soundboard and uses [Whisper AI](https://github.com/SYSTRAN/faster-whisper) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any of 200 languages using [NLLB-200](https://ai.meta.com/research/no-language-left-behind/) (Meta's "No Language Left Behind"), a high-quality local translation model.
 
 No app to install. No account to create. Just open a browser.
 
@@ -20,7 +20,7 @@ Everything runs locally. No audio leaves your building. No internet connection i
 ## Features
 
 - **Real-time captioning** — large, readable text streamed live to any device on the network
-- **Real-time translation** — any language, any device, powered by local translation models
+- **Real-time translation** — 200 languages, any device, powered by Meta's NLLB-200 model
 - **Server-side audio capture** — clean audio direct from the soundboard, not ambient room noise
 - **Personal, not projected** — captions appear on individual devices; those who need them get them, without a distracting overlay for everyone else
 - **Admin panel** — quality presets, settings, and controls for the sound booth operator
@@ -50,8 +50,14 @@ OpenEar is different:
 
 **Mac Mini M4 (in testing):**
 - Base model M4 Mac Mini (16GB unified memory, $599)
-- Goal: make this the recommended low-cost deployment target without sacrificing caption quality
+- Runs on CPU only (CTranslate2 has no Metal support) — medium model viable, large-v3 too slow
 - Status: v0.6 — actively being tested
+
+**NVIDIA Jetson Orin (in testing):**
+- Jetson Orin Nano Super ($249) — CUDA-native, same code path as desktop GPUs
+- 8GB unified memory with 1024 CUDA cores, tiny and silent form factor
+- Goal: sub-$300 dedicated church appliance
+- Status: v0.6 — hardware on order
 
 ### Reference Test Server
 
@@ -105,7 +111,7 @@ That's it. The setup script handles everything else.
 | v0.3 | UI polish, quality presets, admin settings | ✓ Done |
 | v0.4 | Real-time translation — any language, any device | ✓ Done |
 | v0.5 | One-click installer | ✓ Done |
-| v0.6 | Mac Mini testing | ◐ In progress... |
+| v0.6 | Mac Mini / Jetson Orin testing | ◐ In progress... |
 | v0.7 | Testing at select churches | ○ Planned |
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
