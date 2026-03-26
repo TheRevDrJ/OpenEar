@@ -197,52 +197,52 @@ if %errorlevel% neq 0 (
 )
 echo   [OK] sounddevice
 
-echo   Installing faster-whisper...
-python -m pip install faster-whisper --quiet
+echo   Installing onnx-asr (Parakeet speech recognition)...
+python -m pip install "onnx-asr[gpu,hub]" --quiet
 if %errorlevel% neq 0 (
-    echo   [FAIL] faster-whisper install failed
+    echo   [FAIL] onnx-asr install failed
     pause
     exit /b 1
 )
-echo   [OK] faster-whisper
+echo   [OK] onnx-asr
 
-echo   Installing sentencepiece (for NLLB translation)...
-python -m pip install sentencepiece --quiet
+echo   Installing sentencepiece and ctranslate2 (for NLLB translation)...
+python -m pip install sentencepiece ctranslate2 --quiet
 if %errorlevel% neq 0 (
-    echo   [FAIL] sentencepiece install failed
+    echo   [FAIL] sentencepiece/ctranslate2 install failed
     pause
     exit /b 1
 )
-echo   [OK] sentencepiece
+echo   [OK] sentencepiece and ctranslate2
 
 :: ----------------------------------------------------------------------------
-:: CUDA GPU acceleration (optional but recommended)
+:: CUDA GPU acceleration (for NLLB translation model)
 :: ----------------------------------------------------------------------------
 echo.
 echo   Checking for NVIDIA GPU...
 
 nvidia-smi >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   [INFO] No NVIDIA GPU detected. Whisper will run on CPU.
-    echo          This works but is significantly slower. A GPU is recommended.
+    echo   [INFO] No NVIDIA GPU detected. Translation will run on CPU.
+    echo          This works but is slower. A GPU is recommended for translation.
     goto cuda_done
 )
 
 echo   [OK] NVIDIA GPU detected
-echo   Installing CUDA libraries for GPU acceleration...
+echo   Installing CUDA libraries for translation acceleration...
 python -m pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 --quiet
 if %errorlevel% equ 0 (
-    echo   [OK] CUDA libraries installed - GPU acceleration enabled
+    echo   [OK] CUDA libraries installed - GPU translation enabled
 ) else (
-    echo   [WARN] CUDA install failed. Whisper will run on CPU - slower but functional.
+    echo   [WARN] CUDA install failed. Translation will run on CPU - slower but functional.
 )
 :cuda_done
 
 :: ----------------------------------------------------------------------------
-:: Pre-download Whisper model
+:: Pre-download AI models (Parakeet ASR + NLLB translation)
 :: ----------------------------------------------------------------------------
 echo.
-echo   Downloading AI models (~6GB total, one-time download)...
+echo   Downloading AI models (~5GB total, one-time download)...
 echo   This will take several minutes depending on your internet speed.
 echo.
 
