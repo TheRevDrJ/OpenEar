@@ -132,7 +132,7 @@ That's it. The setup script handles everything else.
 | v0.4 | Real-time translation — any language, any device | ✓ Done |
 | v0.5 | One-click installer | ✓ Done |
 | v0.6 | Mac Mini / Jetson Orin testing | ◐ In progress... |
-| v0.7 | Testing at select churches | ○ Planned |
+| v0.7 | Testing at select churches | ◐ In progress... |
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
 | v1.0 | Public release — automatically deployable for any church | ○ Planned |
