@@ -179,10 +179,15 @@ NLLB_LANG_MAP = {
 
 NLLB_MODEL_DIR = str(Path(__file__).parent / "models" / "nllb-3.3b-ct2")
 
-# Load NLLB translation model
+# Load NLLB translation model — auto-download if missing
 logger.info("Loading NLLB-200 translation model...")
 t0 = time.time()
 try:
+    if not Path(NLLB_MODEL_DIR).exists():
+        logger.info("NLLB model not found — downloading now (~3GB, one-time)...")
+        from huggingface_hub import snapshot_download
+        snapshot_download("entai2965/nllb-200-3.3B-ctranslate2", local_dir=NLLB_MODEL_DIR)
+        logger.info(f"NLLB model downloaded in {time.time() - t0:.1f}s")
     nllb_translator = ctranslate2.Translator(
         NLLB_MODEL_DIR,
         device="cuda",
@@ -191,8 +196,8 @@ try:
     nllb_sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
     logger.info(f"NLLB translation model loaded in {time.time() - t0:.1f}s")
 except Exception as e:
-    logger.warning(f"NLLB translation model not found: {e}")
-    logger.warning("Translation will be unavailable. Run download_models.py to install.")
+    logger.warning(f"NLLB translation model unavailable: {e}")
+    logger.warning("Translation will be disabled for this session.")
     nllb_translator = None
     nllb_sp = None
 
