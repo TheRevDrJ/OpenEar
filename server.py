@@ -177,7 +177,7 @@ NLLB_LANG_MAP = {
     "zu": ("zul_Latn", "Zulu"),
 }
 
-NLLB_MODEL_DIR = str(Path.home() / ".cache" / "nllb-3.3b-ct2")
+NLLB_MODEL_DIR = str(Path(__file__).parent / "models" / "nllb-3.3b-ct2")
 
 # Load NLLB translation model
 logger.info("Loading NLLB-200 translation model...")
