@@ -3,6 +3,7 @@
 :: Copyright (c) 2026 TheRevDrJ
 :: Licensed under AGPL-3.0 — see LICENSE file for details
 setlocal enabledelayedexpansion
+set "SCRIPT_DIR=%~dp0"
 
 :: ============================================================================
 :: OpenEar Setup Script
