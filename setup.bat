@@ -311,11 +311,38 @@ if %errorlevel% equ 0 (
 powershell -Command "Start-Service sshd; Set-Service -Name sshd -StartupType Automatic" >nul 2>&1
 echo   [OK] SSH service started and set to auto-start
 
+:: TODO: Set PowerShell as the default SSH shell (currently defaults to cmd.exe)
+::   powershell -Command "New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -PropertyType String -Force"
+
+:: TODO: Install Jonathan's SSH public key for passwordless login
+::   Key goes in: C:\Users\<username>\.ssh\authorized_keys
+::   For admin users, Windows SSH uses: C:\ProgramData\ssh\administrators_authorized_keys
+::   (that file needs restricted permissions — only SYSTEM and Administrators, not Users)
+
 :: SSH firewall rule
 netsh advfirewall firewall show rule name="OpenSSH-Server" >nul 2>&1
 if %errorlevel% neq 0 (
     netsh advfirewall firewall add rule name="OpenSSH-Server" dir=in action=allow protocol=TCP localport=22 >nul 2>&1
     echo   [OK] SSH firewall rule added
+)
+
+:: Enable Remote Desktop
+echo   Enabling Remote Desktop...
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >nul 2>&1
+powershell -Command "Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   [OK] Remote Desktop enabled
+) else (
+    echo   [WARN] Could not enable Remote Desktop
+)
+
+:: RDP firewall rule
+netsh advfirewall firewall show rule name="Remote Desktop" >nul 2>&1
+if %errorlevel% neq 0 (
+    netsh advfirewall firewall add rule name="Remote Desktop" dir=in action=allow protocol=TCP localport=3389 >nul 2>&1
+    echo   [OK] RDP firewall rule added (port 3389)
+) else (
+    echo   [OK] RDP firewall rule already exists
 )
 
 :remote_done
