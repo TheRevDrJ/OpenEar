@@ -288,6 +288,10 @@ if %errorlevel% equ 0 (
     if %errorlevel% equ 0 (
         echo   [OK] Tailscale installed
         echo   NOTE: Open Tailscale from the Start menu and sign in to activate.
+        echo   NOTE: After signing in, from your Tailscale admin console:
+        echo         1. Add this machine to your network node
+        echo         2. Tag it with the 'openear' tag
+        echo         3. Enable unattended/headless mode so it stays connected without a logged-in user
     ) else (
         echo   [WARN] Tailscale install failed. Install manually from https://tailscale.com/download
     )
