@@ -430,6 +430,7 @@
       <option value="">Loading devices...</option>
     </select>
     <button class="refresh-btn" onclick="loadDevices()">Refresh devices</button>
+    <button class="refresh-btn" id="monitor-btn" onclick="toggleMonitor()" style="margin-left:8px">Test Mic</button>
     <div id="error-msg" class="error-msg"></div>
 
     <div class="meter-container" id="meter-container" style="display:none">
@@ -545,6 +546,38 @@ const serverHostname = document.getElementById('server-hostname');
 const serverIP = document.getElementById('server-ip');
 const qrUrlEl = document.getElementById('qr-url');
 const qrCodeEl = document.getElementById('qr-code');
+const monitorBtn = document.getElementById('monitor-btn');
+
+let isMonitoring = false;
+
+async function toggleMonitor() {
+  const deviceId = parseInt(deviceSelect.value);
+  if (!isMonitoring) {
+    if (isNaN(deviceId)) { showError('Select an audio device first'); return; }
+    try {
+      const res = await fetch('/api/monitor/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId }),
+      });
+      const data = await res.json();
+      if (data.error) { showError(data.error); return; }
+      isMonitoring = true;
+      monitorBtn.textContent = 'Stop Test';
+      monitorBtn.style.color = 'var(--success)';
+      meterContainer.style.display = 'block';
+    } catch (e) { showError('Failed to start monitor'); }
+  } else {
+    try {
+      await fetch('/api/monitor/stop', { method: 'POST' });
+    } catch (e) {}
+    isMonitoring = false;
+    monitorBtn.textContent = 'Test Mic';
+    monitorBtn.style.color = '';
+    meterContainer.style.display = 'none';
+    meterFill.style.width = '0%';
+  }
+}
 
 let devices = [];
 let qrGenerated = false;
@@ -675,15 +708,25 @@ async function updateStatus() {
       deviceName.textContent = 'None';
     }
 
-    // Audio level meter
-    if (data.capturing) {
+    // Audio level meter — show when capturing or monitoring
+    if (data.capturing || data.monitoring) {
       meterContainer.style.display = 'block';
       const pct = Math.round(data.audio_level * 100);
       meterFill.style.width = pct + '%';
       meterFill.className = 'meter-fill' + (pct > 85 ? ' hot' : pct > 60 ? ' warm' : '');
       clipIndicator.className = 'clip-indicator' + (data.clipping ? ' active' : '');
-    } else {
+    } else if (!isMonitoring) {
       meterContainer.style.display = 'none';
+    }
+
+    // Test Mic button — hide while capturing (meter is already live from capture)
+    monitorBtn.style.display = data.capturing ? 'none' : '';
+
+    // Sync local monitor state with server (e.g. if server restarted)
+    if (!data.monitoring && isMonitoring) {
+      isMonitoring = false;
+      monitorBtn.textContent = 'Test Mic';
+      monitorBtn.style.color = '';
     }
   } catch (e) {
     serverDown.classList.add('visible');

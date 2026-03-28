@@ -215,6 +215,8 @@ capture_stream: sd.InputStream | None = None # The active sounddevice input stre
 transcription_task: asyncio.Task | None = None  # The running async transcription loop
 current_audio_level: float = 0.0             # RMS audio level (0.0-1.0) for the admin meter
 audio_clipping: bool = False                 # True if audio peaks are hitting the ceiling
+is_monitoring: bool = False                  # Monitor mode: level meter only, no transcription
+monitor_stream: sd.InputStream | None = None # The monitor-only audio stream
 
 # ============================================================================
 # ENABLED LANGUAGES (admin-controlled visibility)
@@ -323,6 +325,21 @@ def audio_callback(indata: np.ndarray, frames: int, time_info, status):
     # Thread-safe append to the buffer that the transcription loop will drain
     with buffer_lock:
         audio_buffer.append(indata.copy())
+
+
+def monitor_callback(indata: np.ndarray, frames: int, time_info, status):
+    """Audio callback for monitor mode — updates level meter only, no transcription.
+
+    Same math as audio_callback but skips the buffer append, so the audio
+    is measured and discarded. This lets the admin verify the right device
+    is live before starting a real capture session.
+    """
+    global current_audio_level, audio_clipping
+    if status:
+        logger.warning(f"Monitor status: {status}")
+    rms = float(np.sqrt(np.mean(indata ** 2)))
+    current_audio_level = min(rms * 6.0, 1.0)
+    audio_clipping = float(np.max(np.abs(indata))) > 0.70
 
 
 # ============================================================================
@@ -510,6 +527,44 @@ async def transcription_loop():
 
 
 # ============================================================================
+# MONITOR CONTROL
+# ============================================================================
+
+def start_monitor(device_id: int):
+    """Open an audio stream for level monitoring only — no buffering, no transcription."""
+    global is_monitoring, monitor_stream
+    is_monitoring = True
+    monitor_stream = sd.InputStream(
+        device=device_id,
+        samplerate=SAMPLE_RATE,
+        channels=1,
+        dtype="float32",
+        callback=monitor_callback,
+        blocksize=int(SAMPLE_RATE * 0.1),
+    )
+    monitor_stream.start()
+    logger.info(f"Audio monitor started on device {device_id}")
+
+
+def stop_monitor():
+    """Stop the monitor stream and clean up."""
+    global is_monitoring, monitor_stream
+    is_monitoring = False
+    current_audio_level_reset()
+    if monitor_stream:
+        monitor_stream.stop()
+        monitor_stream.close()
+        monitor_stream = None
+    logger.info("Audio monitor stopped")
+
+
+def current_audio_level_reset():
+    global current_audio_level, audio_clipping
+    current_audio_level = 0.0
+    audio_clipping = False
+
+
+# ============================================================================
 # CAPTURE CONTROL
 # ============================================================================
 
@@ -585,6 +640,10 @@ async def api_start(body: dict):
     if device_id is None:
         return {"error": "device_id required"}, 400
 
+    # Stop monitor mode if active — capture and monitor can't share the same device
+    if is_monitoring:
+        stop_monitor()
+
     # Stop any existing capture before starting a new one
     if is_capturing:
         stop_capture()
@@ -622,6 +681,31 @@ async def api_stop():
     return {"status": "stopped"}
 
 
+@app.post("/api/monitor/start")
+async def api_monitor_start(body: dict):
+    """Start monitor mode: open audio stream for level metering only, no transcription.
+
+    Lets the admin verify the correct device is live and at a good level
+    before committing to a full capture session.
+    """
+    device_id = body.get("device_id")
+    if device_id is None:
+        return {"error": "device_id required"}, 400
+    if is_capturing:
+        return {"error": "Cannot monitor while capturing"}, 400
+    if is_monitoring:
+        stop_monitor()
+    start_monitor(device_id)
+    return {"status": "monitoring", "device_id": device_id}
+
+
+@app.post("/api/monitor/stop")
+async def api_monitor_stop():
+    """Stop monitor mode."""
+    stop_monitor()
+    return {"status": "stopped"}
+
+
 @app.get("/api/status")
 async def api_status():
     """Return current server state. Polled by the admin page every 500ms
@@ -634,6 +718,7 @@ async def api_status():
 
     return {
         "capturing": is_capturing,
+        "monitoring": is_monitoring,
         "device_id": selected_device_id,
         "clients": len(connected_clients),
         "audio_level": round(current_audio_level, 3),
