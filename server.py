@@ -452,7 +452,7 @@ async def broadcast(message: dict):
 
             # Translate once per language, send to all clients
             translation_cache: dict[str, str] = {"en": complete_text}
-            for client in connected_clients:
+            for client in list(connected_clients):
                 lang = client_languages.get(client, "en")
                 try:
                     if lang not in translation_cache:
@@ -502,33 +502,39 @@ async def transcription_loop():
     samples_per_chunk = SAMPLE_RATE * CHUNK_DURATION
 
     while is_capturing:
-        # Sleep for the chunk duration, letting audio accumulate
-        await asyncio.sleep(CHUNK_DURATION)
+        try:
+            # Sleep for the chunk duration, letting audio accumulate
+            await asyncio.sleep(CHUNK_DURATION)
 
-        # Drain the buffer under lock — this is the handoff point between
-        # the audio capture thread and the async transcription loop
-        with buffer_lock:
-            if not audio_buffer:
+            # Drain the buffer under lock — this is the handoff point between
+            # the audio capture thread and the async transcription loop
+            with buffer_lock:
+                if not audio_buffer:
+                    continue
+                chunk = np.concatenate(audio_buffer)  # Merge all small blocks into one array
+                audio_buffer.clear()
+
+            # Skip tiny chunks — less than 1 second isn't useful for Whisper
+            if len(chunk) < SAMPLE_RATE:
                 continue
-            chunk = np.concatenate(audio_buffer)  # Merge all small blocks into one array
-            audio_buffer.clear()
 
-        # Skip tiny chunks — less than 1 second isn't useful for Whisper
-        if len(chunk) < SAMPLE_RATE:
-            continue
+            # If the input device was stereo, average the channels to mono
+            # (Whisper only accepts mono audio)
+            if chunk.ndim > 1:
+                chunk = chunk.mean(axis=1)
 
-        # If the input device was stereo, average the channels to mono
-        # (Whisper only accepts mono audio)
-        if chunk.ndim > 1:
-            chunk = chunk.mean(axis=1)
+            # Run transcription on a thread pool so the GPU inference doesn't
+            # block the async event loop (WebSocket connections would stall)
+            text = await loop.run_in_executor(None, transcribe_audio_chunk, chunk)
 
-        # Run transcription on a thread pool so the GPU inference doesn't
-        # block the async event loop (WebSocket connections would stall)
-        text = await loop.run_in_executor(None, transcribe_audio_chunk, chunk)
+            if text:
+                logger.info("Transcription sent to clients")
+                await broadcast({"type": "transcript", "text": text})
 
-        if text:
-            logger.info("Transcription sent to clients")
-            await broadcast({"type": "transcript", "text": text})
+        except asyncio.CancelledError:
+            raise  # Let stop_capture() cancellation propagate normally
+        except Exception as e:
+            logger.error(f"Transcription loop error (continuing): {e}", exc_info=True)
 
 
 # ============================================================================
