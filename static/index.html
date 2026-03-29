@@ -316,6 +316,26 @@ let isCapturing = false;        // Whether the server is actively transcribing
 let reconnectTimeout = null;    // Timer handle for auto-reconnect
 let autoScroll = true;          // Whether to auto-scroll as new text arrives
 let selectedLang = localStorage.getItem('openear-lang') || 'en';
+let wakeLock = null;            // Screen Wake Lock — keeps phone screen on while connected
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;  // API not supported (older browsers)
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) {
+    // Silently ignore — wake lock is a nice-to-have, not critical
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+
+// The browser releases the wake lock automatically when the page goes to
+// background. Re-acquire it when the page becomes visible again.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
 
 // ============================================================================
 // FONT SIZE
@@ -390,6 +410,7 @@ function connect() {
   ws.onopen = () => {
     setStatus('connected', 'Connected');
     serverDownBanner.classList.remove('visible');
+    requestWakeLock();
     // Tell the server our language preference right away
     if (selectedLang !== 'en') {
       ws.send(JSON.stringify({ type: 'set_language', lang: selectedLang }));
@@ -421,6 +442,7 @@ function connect() {
   };
 
   ws.onclose = () => {
+    releaseWakeLock();
     setStatus('', 'Disconnected');
     serverDownBanner.classList.add('visible');
     // Hide the "disabled" banner when the server is down — "server unavailable"
