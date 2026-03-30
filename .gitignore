@@ -215,5 +215,6 @@ openear.log.*
 
 # Development/test tools (not for release)
 test/
+BENCHMARK_REPORT.md
 text-logs/
 *.tmp.*

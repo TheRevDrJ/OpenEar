@@ -210,13 +210,45 @@ def word_error_rate(hypothesis: str, reference: str) -> tuple[float, dict]:
 
 # ── ASR ───────────────────────────────────────────────────────────────────────
 
-def load_asr():
-    import onnx_asr
-    print("Loading Parakeet ASR model...")
+WHISPER_MODELS = ["whisper-large-v3", "whisper-large-v3-turbo", "whisper-medium", "whisper-small"]
+
+
+def load_asr(model_name: str = "parakeet"):
+    """Load the requested ASR model. Returns an opaque model object — pass to transcribe_chunk()."""
     t0 = time.time()
-    model = onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v2")
+    if model_name == "parakeet":
+        import onnx_asr
+        print("Loading Parakeet ASR model (nemo-parakeet-tdt-0.6b-v2)...")
+        model = ("parakeet", onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v2"))
+    elif model_name in WHISPER_MODELS:
+        from faster_whisper import WhisperModel
+        size = model_name.replace("whisper-", "")  # "large-v3", "large-v3-turbo", etc.
+        # Use GPU if available, fall back to CPU with int8 quantization
+        try:
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "cpu"
+        compute = "float16" if device == "cuda" else "int8"
+        print(f"Loading Whisper {size} ({device}, {compute})...")
+        model = ("whisper", WhisperModel(size, device=device, compute_type=compute))
+    else:
+        print(f"Unknown model: {model_name}. Choose: parakeet, {', '.join(WHISPER_MODELS)}", file=sys.stderr)
+        sys.exit(1)
     print(f"ASR loaded in {time.time() - t0:.1f}s\n")
     return model
+
+
+def transcribe_chunk(model, audio: np.ndarray) -> str:
+    """Transcribe a single numpy audio chunk. Handles both Parakeet and Whisper backends."""
+    backend, m = model
+    if backend == "parakeet":
+        result = m.recognize(audio)
+        return result.text.strip() if hasattr(result, "text") else str(result).strip()
+    elif backend == "whisper":
+        segments, _ = m.transcribe(audio, beam_size=5, language="en")
+        return " ".join(s.text.strip() for s in segments).strip()
+    return ""
 
 
 def vad_chunks(audio: np.ndarray,
@@ -301,8 +333,7 @@ def transcribe_file(audio_path: str, asr_model,
         if len(chunk) < SAMPLE_RATE:
             elapsed_audio += len(chunk) / SAMPLE_RATE
             continue
-        result = asr_model.recognize(chunk)
-        text = result.text.strip() if hasattr(result, "text") else str(result).strip()
+        text = transcribe_chunk(asr_model, chunk)
         ts = int(elapsed_audio)
         elapsed_audio += len(chunk) / SAMPLE_RATE
         if text:
@@ -392,20 +423,64 @@ def align_text_to_audio(audio_path: str, full_text_path: str, asr_model,
 
 
 # ── Translation ───────────────────────────────────────────────────────────────
+#
+# Uses NLLB-200 (No Language Left Behind) by Meta, quantized to CTranslate2
+# format for fast CPU/GPU inference. The 3.3B parameter model covers 200
+# languages from a single checkpoint — no per-language model downloads.
+#
+# Model location: models/nllb-3.3b-ct2/ (relative to this script)
+# HuggingFace: entai2965/nllb-200-3.3B-ctranslate2
+#
+# Translation pipeline:
+#   1. SentencePiece tokenizer encodes English text into subword tokens
+#   2. CTranslate2 Translator runs the NLLB encoder-decoder
+#   3. Target language token (e.g. "kor_Hang") is prepended as a forced
+#      prefix so the decoder produces output in the requested language
+#   4. The leading language token is stripped from the hypothesis
+#   5. SentencePiece decodes the output tokens back to a string
+#
+# Punctuation quality in the input matters significantly. NLLB uses
+# capitalization and terminal punctuation as sentence boundary signals,
+# especially for SOV languages (Korean, Japanese) where word order
+# restructuring requires knowing where sentences begin and end.
+# Parakeet's consistent punctuation output makes it the preferred ASR
+# backend for the translation pipeline — see BENCHMARK_REPORT.md.
+
 
 def load_translator():
+    """Load NLLB-200 3.3B translation model via CTranslate2.
+
+    Uses GPU if available (device="auto"), otherwise CPU. First call
+    may be slow if the model hasn't been downloaded yet (~3GB one-time).
+    """
     import ctranslate2
     import sentencepiece as spm
 
     print("\nLoading NLLB translation model...")
     t0 = time.time()
+    # CTranslate2 handles device selection — uses CUDA if available
     translator = ctranslate2.Translator(NLLB_MODEL_DIR, device="auto")
+    # SentencePiece tokenizer shared across all 200 languages
     sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
     print(f"Translator loaded in {time.time() - t0:.1f}s\n")
     return translator, sp
 
 
 def translate_lines(lines: list[str], target_lang: str, translator, sp) -> list[str]:
+    """Translate a list of English text segments to the target language.
+
+    Each line is translated independently. Empty lines are passed through
+    to preserve paragraph structure in the output.
+
+    Args:
+        lines:       List of English text segments (one per ASR chunk)
+        target_lang: Two-letter language code (e.g. "ko", "es", "fr")
+        translator:  CTranslate2 Translator instance from load_translator()
+        sp:          SentencePiece processor instance from load_translator()
+
+    Returns:
+        List of translated strings, same length as input.
+    """
     entry = NLLB_LANG_MAP.get(target_lang)
     if not entry:
         print(f"Unknown language code: {target_lang}", file=sys.stderr)
@@ -416,17 +491,28 @@ def translate_lines(lines: list[str], target_lang: str, translator, sp) -> list[
     results = []
     for line in lines:
         if not line.strip():
-            results.append("")
+            results.append("")  # preserve blank lines
             continue
+
+        # Tokenize: SentencePiece encodes to subword units
         tokens = sp.encode(line, out_type=str)
+
+        # NLLB input format: [src_lang_token] + tokens + [</s>]
+        # The source language token tells the encoder what it's reading
         input_tokens = ["eng_Latn"] + tokens + ["</s>"]
+
+        # Target prefix forces the decoder to produce the requested language.
+        # beam_size=4 balances quality vs. speed (5 is marginally better,
+        # 1 is greedy decoding — fast but lower quality)
         output = translator.translate_batch(
             [input_tokens],
             target_prefix=[[nllb_code]],
             max_batch_size=1,
             beam_size=4,
         )
-        output_tokens = output[0].hypotheses[0][1:]  # skip language token
+
+        # output[0].hypotheses[0] is the top beam; [0] is the lang token, skip it
+        output_tokens = output[0].hypotheses[0][1:]
         translated = sp.decode(output_tokens)
         results.append(translated)
         print(f"  {translated}")
@@ -451,6 +537,9 @@ def main():
                         help="Target language code, e.g. ko, es, fr (default: ko)")
     parser.add_argument("-o", "--output",
                         help="Output file — if omitted, prints to stdout")
+    parser.add_argument("--model", default="parakeet",
+                        choices=["parakeet"] + WHISPER_MODELS,
+                        help="ASR model to use (default: parakeet)")
     parser.add_argument("--wer", metavar="REFERENCE",
                         help="Reference transcript file — prints Word Error Rate after transcription")
     parser.add_argument("--chunk", type=int, default=None,
@@ -470,7 +559,7 @@ def main():
         if not args.reference_text:
             print("align mode requires a full chapter text file as second argument.", file=sys.stderr)
             sys.exit(1)
-        asr = load_asr()
+        asr = load_asr(args.model)
         extracted = align_text_to_audio(args.input, args.reference_text, asr)
         if args.output:
             Path(args.output).write_text(extracted, encoding="utf-8")
@@ -483,7 +572,7 @@ def main():
     lines = []
 
     if args.mode in ("transcribe", "both"):
-        asr = load_asr()
+        asr = load_asr(args.model)
         lines = transcribe_file(args.input, asr,
                                 chunk_duration=args.chunk,
                                 use_vad=args.vad,
