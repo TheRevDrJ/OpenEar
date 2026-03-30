@@ -48,31 +48,40 @@ ping 127.0.0.1 -n 2 > nul
 echo Starting OpenEar...
 start "" /b pythonw "%SERVER_SCRIPT%" %~2 > nul 2>&1
 
-:: Give the model time to load and bind the port (slower GPUs need ~20s)
-ping 127.0.0.1 -n 21 > nul
-
+:: Poll for port 80 — check every 3 seconds, timeout after 90 seconds
+set /a ELAPSED=0
+echo   Loading models...
+:start_wait
+ping 127.0.0.1 -n 4 > nul
+set /a ELAPSED+=3
 call :find_pid
-if defined RUNNING_PID (
-    echo !RUNNING_PID! > "%PID_FILE%"
-    echo.
-    echo   OpenEar is running ^(PID: !RUNNING_PID!^)
-    echo.
-    echo   Admin:  http://localhost/admin.html
-    echo   Client: http://localhost
-    echo   Log:    %LOG_FILE%
-    echo.
-    echo   Use 'openear stop' to shut down.
-    echo   Use 'openear log' to view live logs.
-    echo.
-) else (
-    echo.
-    echo   Failed to start OpenEar.
-    echo   Try 'openear verbose' to see errors in the console.
-    echo   Or check %LOG_FILE%
-    echo.
-    exit /b 1
-)
+if defined RUNNING_PID goto start_success
+if !ELAPSED! geq 180 goto start_timeout
+if !ELAPSED! equ 60 echo   Still loading... ^(!ELAPSED!s^) — may be downloading models on first run
+if !ELAPSED! neq 60 echo   Still loading... ^(!ELAPSED!s^)
+goto start_wait
+
+:start_success
+echo !RUNNING_PID! > "%PID_FILE%"
+echo.
+echo   OpenEar is running ^(PID: !RUNNING_PID!^) — started in !ELAPSED!s
+echo.
+echo   Admin:  http://localhost/admin.html
+echo   Client: http://localhost
+echo   Log:    %LOG_FILE%
+echo.
+echo   Use 'openear stop' to shut down.
+echo   Use 'openear log' to view live logs.
+echo.
 exit /b 0
+
+:start_timeout
+echo.
+echo   Failed to start OpenEar after 3 minutes.
+echo   Try 'openear verbose' to see errors in the console.
+echo   Or check %LOG_FILE%
+echo.
+exit /b 1
 
 :: ============================================================================
 :stop
