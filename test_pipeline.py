@@ -515,7 +515,11 @@ def translate_lines(lines: list[str], target_lang: str, translator, sp) -> list[
         output_tokens = output[0].hypotheses[0][1:]
         translated = sp.decode(output_tokens)
         results.append(translated)
-        print(f"  {translated}")
+        # Print progress — safely handle non-ASCII output on Windows consoles
+        try:
+            print(f"  {translated}")
+        except UnicodeEncodeError:
+            print(f"  [segment {len(results)} translated]")
 
     return results
 
