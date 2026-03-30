@@ -91,10 +91,14 @@ if LOG_TEXT:
 ASR_MODEL = "nemo-parakeet-tdt-0.6b-v2"  # NVIDIA Parakeet — natively punctuated output
 PORT = 80                   # Default HTTP port — no :port needed in URLs
 SAMPLE_RATE = 16000         # 16kHz — what Whisper expects. Audio is resampled to this.
-CHUNK_DURATION = 10         # Seconds of audio to accumulate before transcribing.
-                            # Tested: 3s=14.4% WER, 5s=4.1% WER, 10s=3.0% WER (Parakeet).
-                            # 10s is the sweet spot — better accuracy, faster inference.
-                            # 3s is a good balance between latency and accuracy.
+MIN_CHUNK_DURATION = 5      # Don't cut before 5s — too little context for Parakeet.
+MAX_CHUNK_DURATION = 10     # Hard cap — always cut here even mid-speech.
+                            # WER tested at fixed intervals: 3s=14.4%, 5s=4.1%, 10s=3.0%.
+SILENCE_THRESHOLD  = 0.005  # RMS below this = silence. Raise if cutting mid-speech;
+                            # lower if not cutting at natural pauses. Range: 0.003–0.05.
+                            # 0.005 optimal for close-mic'd SM58/lapel/headset.
+                            # If room ambient mic is used, try 0.015–0.02.
+SILENCE_WINDOW     = 0.5    # Seconds of trailing audio to check for silence.
 
 # ============================================================================
 # LOGGING SETUP
@@ -489,47 +493,76 @@ async def broadcast(message: dict):
 async def transcription_loop():
     """Main transcription loop — runs as an async task while capturing is active.
 
-    Every CHUNK_DURATION seconds, this:
-    1. Drains all accumulated audio from the buffer
-    2. Skips if there's less than 1 second of audio (not worth transcribing)
-    3. Hands the audio to Whisper via run_in_executor (so the GPU work doesn't
-       block the async event loop — other WebSocket messages can still flow)
-    4. Broadcasts any resulting text to all clients
+    Uses Voice Activity Detection (VAD) to cut at natural speech boundaries
+    rather than fixed time intervals. Every 0.25s it checks whether to cut:
+
+    1. Below MIN_CHUNK_DURATION: keep accumulating, not enough context yet
+    2. Between MIN and MAX: cut only if trailing audio is below SILENCE_THRESHOLD
+       (speaker paused) — this gives Parakeet complete sentences
+    3. At MAX_CHUNK_DURATION: hard cut regardless, prevents runaway buffering
+
+    Cutting at silence vs. mid-word significantly reduces WER because Parakeet
+    sees complete phrases instead of arbitrary slices.
 
     Note on privacy: we log THAT a transcription happened, not WHAT was said.
     Sermon content stays ephemeral — it never hits disk.
     """
     loop = asyncio.get_event_loop()
-    samples_per_chunk = SAMPLE_RATE * CHUNK_DURATION
+    silence_samples = int(SAMPLE_RATE * SILENCE_WINDOW)
 
     while is_capturing:
         try:
-            # Sleep for the chunk duration, letting audio accumulate
-            await asyncio.sleep(CHUNK_DURATION)
+            # Check 4x/second — fast enough to catch natural pauses
+            await asyncio.sleep(0.25)
 
-            # Drain the buffer under lock — this is the handoff point between
-            # the audio capture thread and the async transcription loop
+            chunk = None
+            cut_reason = ""
+
             with buffer_lock:
                 if not audio_buffer:
                     continue
-                chunk = np.concatenate(audio_buffer)  # Merge all small blocks into one array
+
+                # How much audio have we accumulated?
+                total_samples = sum(len(b) for b in audio_buffer)
+                accumulated = total_samples / SAMPLE_RATE
+
+                if accumulated < MIN_CHUNK_DURATION:
+                    continue  # Not enough context yet — keep accumulating
+
+                # Check if the trailing SILENCE_WINDOW seconds is silent
+                # Grab tail blocks without draining the buffer
+                tail_chunks = []
+                tail_count = 0
+                for block in reversed(audio_buffer):
+                    tail_chunks.append(block)
+                    tail_count += len(block)
+                    if tail_count >= silence_samples:
+                        break
+                tail = np.concatenate(tail_chunks)
+                rms = float(np.sqrt(np.mean(tail ** 2)))
+                at_silence = rms < SILENCE_THRESHOLD
+
+                if accumulated >= MAX_CHUNK_DURATION:
+                    cut_reason = f"max cap ({accumulated:.1f}s)"
+                elif at_silence:
+                    cut_reason = f"silence (rms={rms:.4f}, {accumulated:.1f}s)"
+                else:
+                    continue  # Speech still in progress — wait for a pause
+
+                # Cut here — drain the buffer
+                chunk = np.concatenate(audio_buffer)
                 audio_buffer.clear()
 
-            # Skip tiny chunks — less than 1 second isn't useful for Whisper
-            if len(chunk) < SAMPLE_RATE:
-                continue
-
-            # If the input device was stereo, average the channels to mono
-            # (Whisper only accepts mono audio)
+            # Mono conversion (stereo input devices)
             if chunk.ndim > 1:
                 chunk = chunk.mean(axis=1)
 
-            # Run transcription on a thread pool so the GPU inference doesn't
+            # Run transcription on a thread pool so inference doesn't
             # block the async event loop (WebSocket connections would stall)
             text = await loop.run_in_executor(None, transcribe_audio_chunk, chunk)
 
             if text:
-                logger.info("Transcription sent to clients")
+                logger.info(f"Transcription sent to clients [{cut_reason}]")
                 await broadcast({"type": "transcript", "text": text})
 
         except asyncio.CancelledError:
