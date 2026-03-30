@@ -212,3 +212,8 @@ __marimo__/
 # OpenEar logs
 openear.log
 openear.log.*
+
+# Development/test tools (not for release)
+test/
+text-logs/
+*.tmp.*
