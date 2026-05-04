@@ -16,7 +16,7 @@ The admin page (admin.html) controls capture start/stop and device selection via
 The client page (index.html) connects via WebSocket and renders incoming text.
 """
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 import os
 import sys

@@ -13,6 +13,8 @@ set "SCRIPT_DIR=%~dp0"
 set "SERVER_SCRIPT=%SCRIPT_DIR%server.py"
 set "PID_FILE=%SCRIPT_DIR%openear.pid"
 set "LOG_FILE=%SCRIPT_DIR%openear.log"
+set "VENV_PYTHON=%SCRIPT_DIR%venv\Scripts\python.exe"
+set "VENV_PYTHONW=%SCRIPT_DIR%venv\Scripts\pythonw.exe"
 
 if "%~1"=="" goto help
 if /i "%~1"=="start" goto start
@@ -46,7 +48,7 @@ for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='p
 ping 127.0.0.1 -n 2 > nul
 
 echo Starting OpenEar...
-start "" /b pythonw "%SERVER_SCRIPT%" %~2 > nul 2>&1
+start "" /b "%VENV_PYTHONW%" "%SERVER_SCRIPT%" %~2 > nul 2>&1
 
 :: Poll for port 80 — check every 3 seconds, timeout after 90 seconds
 set /a ELAPSED=0
@@ -162,7 +164,7 @@ echo   Starting OpenEar in verbose mode...
 echo   Logs will appear below. Press Ctrl+C to stop.
 echo   ================================================
 echo.
-python "%SERVER_SCRIPT%" %~2
+"%VENV_PYTHON%" "%SERVER_SCRIPT%" %~2
 exit /b 0
 
 :: ============================================================================
@@ -194,7 +196,7 @@ echo.
 echo   Available audio input devices:
 echo   ==============================
 echo.
-python -c "import sounddevice as sd; devs = sd.query_devices(); [print(f'  [{i}] {d[\"name\"]}  ({sd.query_hostapis(d[\"hostapi\"])[\"name\"]}, {d[\"max_input_channels\"]}ch)') for i, d in enumerate(devs) if d['max_input_channels'] > 0]"
+"%VENV_PYTHON%" -c "import sounddevice as sd; devs = sd.query_devices(); [print(f'  [{i}] {d[\"name\"]}  ({sd.query_hostapis(d[\"hostapi\"])[\"name\"]}, {d[\"max_input_channels\"]}ch)') for i, d in enumerate(devs) if d['max_input_channels'] > 0]"
 echo.
 exit /b 0
 
@@ -202,7 +204,7 @@ exit /b 0
 :version
 ::   Shows the OpenEar version.
 :: ============================================================================
-python -c "f=open(r'%SERVER_SCRIPT%'); [print(f'OpenEar v{l.split(chr(34))[1]}') or exit() for l in f if l.startswith('VERSION')]"
+"%VENV_PYTHON%" -c "f=open(r'%SERVER_SCRIPT%'); [print(f'OpenEar v{l.split(chr(34))[1]}') or exit() for l in f if l.startswith('VERSION')]"
 exit /b 0
 
 :: ============================================================================

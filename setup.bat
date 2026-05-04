@@ -173,73 +173,51 @@ if %errorlevel% equ 0 (
 :vcpp_done
 
 :: ----------------------------------------------------------------------------
-:: Install Python dependencies
+:: Create virtual environment
+:: ----------------------------------------------------------------------------
+echo.
+echo   Creating Python virtual environment...
+if exist "%SCRIPT_DIR%venv" (
+    echo   [OK] Virtual environment already exists
+) else (
+    python -m venv "%SCRIPT_DIR%venv"
+    if %errorlevel% neq 0 (
+        echo   [FAIL] Could not create virtual environment.
+        pause
+        exit /b 1
+    )
+    echo   [OK] Virtual environment created
+)
+
+:: ----------------------------------------------------------------------------
+:: Install Python dependencies from pinned requirements.txt
 :: ----------------------------------------------------------------------------
 echo.
 echo   Installing Python packages (this may take several minutes)...
 echo.
 
-:: Core server dependencies
-echo   Installing FastAPI, uvicorn, and websockets...
-python -m pip install fastapi uvicorn websockets --quiet
+"%SCRIPT_DIR%venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%requirements.txt" --quiet
 if %errorlevel% neq 0 (
-    echo   [FAIL] FastAPI/uvicorn install failed
+    echo   [FAIL] Package installation failed.
     pause
     exit /b 1
 )
-echo   [OK] FastAPI and uvicorn
-
-echo   Installing sounddevice...
-python -m pip install sounddevice --quiet
-if %errorlevel% neq 0 (
-    echo   [FAIL] sounddevice install failed
-    pause
-    exit /b 1
-)
-echo   [OK] sounddevice
-
-echo   Installing onnx-asr (Parakeet speech recognition)...
-python -m pip install "onnx-asr[gpu,hub]" --quiet
-if %errorlevel% neq 0 (
-    echo   [FAIL] onnx-asr install failed
-    pause
-    exit /b 1
-)
-echo   [OK] onnx-asr
-
-echo   Installing sentencepiece and ctranslate2 (for NLLB translation)...
-python -m pip install sentencepiece ctranslate2 --quiet
-if %errorlevel% neq 0 (
-    echo   [FAIL] sentencepiece/ctranslate2 install failed
-    pause
-    exit /b 1
-)
-echo   [OK] sentencepiece and ctranslate2
+echo   [OK] All packages installed
 
 :: ----------------------------------------------------------------------------
-:: CUDA GPU acceleration (for NLLB translation model)
+:: CUDA GPU check (packages are already in requirements.txt)
 :: ----------------------------------------------------------------------------
 echo.
-echo   Checking for NVIDIA GPU...
-
 nvidia-smi >nul 2>&1
 if %errorlevel% neq 0 (
     echo   [INFO] No NVIDIA GPU detected. Translation will run on CPU.
     echo          This works but is slower. A GPU is recommended for translation.
     goto cuda_done
 )
+echo   [OK] NVIDIA GPU detected - CUDA libraries included in requirements.txt
 
-echo   [OK] NVIDIA GPU detected
-echo   Installing CUDA libraries for translation acceleration...
-python -m pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 --quiet
-if %errorlevel% equ 0 (
-    echo   [OK] CUDA libraries installed - GPU translation enabled
-) else (
-    echo   [WARN] CUDA install failed. Translation will run on CPU - slower but functional.
-)
-
-:: Verify CUDA DLLs are actually loadable (pip install alone isn't enough on some systems)
-python -c "import nvidia.cublas, os, ctypes; p=os.path.join(os.path.dirname(nvidia.cublas.__path__[0]),'cublas','bin'); ctypes.CDLL(os.path.join(p,'cublas64_12.dll')); print('OK')" >nul 2>&1
+:: Verify CUDA DLLs are actually loadable
+"%SCRIPT_DIR%venv\Scripts\python.exe" -c "import nvidia.cublas, os, ctypes; p=os.path.join(os.path.dirname(nvidia.cublas.__path__[0]),'cublas','bin'); ctypes.CDLL(os.path.join(p,'cublas64_12.dll')); print('OK')" >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo   WARNING: CUDA runtime DLLs are not accessible!
@@ -266,7 +244,7 @@ echo   Downloading AI models (~5GB total, one-time download)...
 echo   This will take several minutes depending on your internet speed.
 echo.
 
-python "%SCRIPT_DIR%download_models.py" 2>&1
+"%SCRIPT_DIR%venv\Scripts\python.exe" "%SCRIPT_DIR%download_models.py" 2>&1
 if %errorlevel% equ 0 (
     echo   [OK] All models downloaded
 ) else (
