@@ -107,7 +107,7 @@ This is the actual hardware OpenEar is developed and tested on:
 ### Prerequisites
 
 1. **Python 3.13+** — install from the Microsoft Store (search "Python 3.13", click Get)
-2. **NVIDIA GPU drivers** — download from [nvidia.com/drivers](https://www.nvidia.com/drivers). The Windows built-in display driver is *not* sufficient — you need the full NVIDIA driver with CUDA support. Run `nvidia-smi` in a Command Prompt to verify.
+2. **NVIDIA GPU drivers** — download the full **Game Ready** or **Studio** driver from [nvidia.com/drivers](https://www.nvidia.com/drivers). **Windows Update installs a basic display driver that does not include the CUDA runtime** — translation will fail silently if you use it. Even if `nvidia-smi` works, you may still be missing the CUDA runtime DLLs. Install the full driver from nvidia.com, restart, then run setup.
 
 That's it. The setup script handles everything else.
 

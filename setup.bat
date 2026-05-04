@@ -237,6 +237,25 @@ if %errorlevel% equ 0 (
 ) else (
     echo   [WARN] CUDA install failed. Translation will run on CPU - slower but functional.
 )
+
+:: Verify CUDA DLLs are actually loadable (pip install alone isn't enough on some systems)
+python -c "import nvidia.cublas, os, ctypes; p=os.path.join(os.path.dirname(nvidia.cublas.__path__[0]),'cublas','bin'); ctypes.CDLL(os.path.join(p,'cublas64_12.dll')); print('OK')" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo   WARNING: CUDA runtime DLLs are not accessible!
+    echo.
+    echo   nvidia-smi detected your GPU, but the CUDA runtime libraries
+    echo   ^(cublas64_12.dll^) could not be loaded. This means translation
+    echo   will fail at runtime even though the driver appears installed.
+    echo.
+    echo   Fix: Install the full NVIDIA Game Ready or Studio Driver from:
+    echo     https://www.nvidia.com/drivers
+    echo.
+    echo   Windows Update installs a basic display driver only — it does
+    echo   NOT include the CUDA runtime. You need the full driver package
+    echo   from nvidia.com. After installing, restart and run setup again.
+    echo.
+)
 :cuda_done
 
 :: ----------------------------------------------------------------------------
