@@ -317,13 +317,16 @@ if %errorlevel% equ 0 (
 powershell -Command "Start-Service sshd; Set-Service -Name sshd -StartupType Automatic" >nul 2>&1
 echo   [OK] SSH service started and set to auto-start
 
-:: TODO: Set PowerShell as the default SSH shell (currently defaults to cmd.exe)
-::   powershell -Command "New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -PropertyType String -Force"
+:: Set PowerShell as the default SSH shell
+powershell -Command "New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -PropertyType String -Force" >nul 2>&1
+echo   [OK] PowerShell set as default SSH shell
 
-:: TODO: Install Jonathan's SSH public key for passwordless login
-::   Key goes in: C:\Users\<username>\.ssh\authorized_keys
-::   For admin users, Windows SSH uses: C:\ProgramData\ssh\administrators_authorized_keys
-::   (that file needs restricted permissions — only SYSTEM and Administrators, not Users)
+:: Install SSH public key for passwordless login
+:: For admin accounts, Windows SSH uses C:\ProgramData\ssh\administrators_authorized_keys
+:: Permissions must be restricted to SYSTEM and Administrators only or SSH ignores the file
+echo   Installing SSH public key for passwordless login...
+powershell -Command "$key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGJ2EP6Jqif8ZHnkkixr4R3x7eGo09/jsFIkfbQ8Wpvo jonathan@Enterprise'; $f = 'C:\ProgramData\ssh\administrators_authorized_keys'; Set-Content -Path $f -Value $key -Encoding UTF8; $acl = Get-Acl $f; $acl.SetAccessRuleProtection($true, $false); $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) }; $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('SYSTEM','FullControl','Allow'))); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('Administrators','FullControl','Allow'))); Set-Acl $f $acl" >nul 2>&1
+echo   [OK] SSH key installed — passwordless login enabled for jonathan@Enterprise
 
 :: SSH firewall rule
 netsh advfirewall firewall show rule name="OpenSSH-Server" >nul 2>&1
