@@ -47,6 +47,7 @@ try:
     cublas_path = os.path.join(os.path.dirname(nvidia.cublas.__path__[0]), "cublas", "bin")
     if os.path.isdir(cublas_path):
         os.add_dll_directory(cublas_path)
+        os.environ["PATH"] = cublas_path + os.pathsep + os.environ.get("PATH", "")
 except (ImportError, Exception):
     pass
 
@@ -55,6 +56,7 @@ try:
     cudnn_path = os.path.join(os.path.dirname(nvidia.cudnn.__path__[0]), "cudnn", "bin")
     if os.path.isdir(cudnn_path):
         os.add_dll_directory(cudnn_path)
+        os.environ["PATH"] = cudnn_path + os.pathsep + os.environ.get("PATH", "")
 except (ImportError, Exception):
     pass
 
