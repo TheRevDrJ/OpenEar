@@ -271,7 +271,7 @@ if %errorlevel% equ 0 (
     echo   [OK] Git already installed
 ) else (
     echo   Installing Git...
-    winget install --id Git.Git -e --silent >nul 2>&1
+    winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements >nul 2>&1
     if %errorlevel% equ 0 (
         echo   [OK] Git installed
     ) else (
@@ -285,7 +285,8 @@ if %errorlevel% equ 0 (
     echo   [OK] Tailscale already installed
 ) else (
     echo   Installing Tailscale...
-    winget install --id tailscale.tailscale -e --silent >nul 2>&1
+    curl -L -o "%TEMP%\tailscale.msi" "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" >nul 2>&1
+    msiexec /i "%TEMP%\tailscale.msi" /quiet /norestart >nul 2>&1
     if %errorlevel% equ 0 (
         echo   [OK] Tailscale installed
         echo   NOTE: Open Tailscale from the Start menu and sign in to activate.

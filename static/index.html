@@ -556,23 +556,6 @@ langSelect.addEventListener('change', () => {
 // ============================================================================
 // WAKE LOCK
 // ============================================================================
-// Prevents the phone/tablet screen from going to sleep while viewing captions.
-// Uses the Screen Wake Lock API (supported on modern mobile browsers).
-// If the lock is released (e.g., user switches apps), we automatically
-// re-acquire it when they come back.
-
-let wakeLock = null;
-async function requestWakeLock() {
-  try {
-    if ('wakeLock' in navigator) {
-      wakeLock = await navigator.wakeLock.request('screen');
-      // Re-acquire if released (e.g., tab switch, app switch)
-      wakeLock.addEventListener('release', () => requestWakeLock());
-    }
-  } catch (e) {}
-}
-
-// ============================================================================
 // INIT
 // ============================================================================
 // Connect to the server and request a wake lock on page load.
