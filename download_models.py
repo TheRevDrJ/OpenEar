@@ -37,9 +37,13 @@ onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v2")
 print("  Parakeet model ready.")
 
 # Download NLLB-200 translation model (~3GB, stored in install dir)
+# Pinned to a specific commit so model updates don't break production on our schedule.
+# To update: verify the new model works, then update this hash to the new commit.
+# Find the latest commit at: https://huggingface.co/entai2965/nllb-200-3.3B-ctranslate2/commits/main
+NLLB_REVISION = "33acf12b9572e946facdf7f3cb3ebcf47ba52286"  # pinned 2026-05-03
 nllb_dir = str(INSTALL_DIR / "models" / "nllb-3.3b-ct2")
 print("  Downloading NLLB-200 translation model (~3GB)...")
-snapshot_download("entai2965/nllb-200-3.3B-ctranslate2", local_dir=nllb_dir)
+snapshot_download("entai2965/nllb-200-3.3B-ctranslate2", local_dir=nllb_dir, revision=NLLB_REVISION)
 print("  NLLB translation model ready.")
 
 print("  All models downloaded.")
