@@ -119,6 +119,7 @@ That's it. The setup script handles everything else.
 4. Start the server: `openear.bat start`
 5. Open `http://localhost/admin` to configure audio input
 6. Congregation connects at `http://<server-ip>` on any device on the same WiFi
+7. *(Optional)* Set a custom Windows desktop wallpaper — right-click desktop → Personalize
 
 > **Note:** OpenEar runs on port 80 (standard HTTP) so users don't need to remember a port number. Your browser may show a "not secure" warning — this is normal. Everything runs on your local network. No data leaves the building.
 
