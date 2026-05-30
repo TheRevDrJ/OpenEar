@@ -218,3 +218,6 @@ test/
 BENCHMARK_REPORT.md
 text-logs/
 *.tmp.*
+
+# Local-only docs (demo scripts, personal notes — not for public repo)
+DEMO.md
