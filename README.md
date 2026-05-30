@@ -11,7 +11,7 @@
 
 ## What It Does
 
-OpenEar taps audio directly from your soundboard and uses [Whisper AI](https://github.com/SYSTRAN/faster-whisper) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any of 200 languages using [NLLB-200](https://ai.meta.com/research/no-language-left-behind/) (Meta's "No Language Left Behind"), a high-quality local translation model.
+OpenEar taps audio directly from your soundboard and uses [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA's fast, accurate speech recognition model) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any of 200 languages using [NLLB-200](https://ai.meta.com/research/no-language-left-behind/) (Meta's "No Language Left Behind"), a high-quality local translation model.
 
 No app to install. No account to create. Just open a browser.
 
@@ -97,7 +97,7 @@ This is the actual hardware OpenEar is developed and tested on:
 | Resource | Usage |
 |----------|-------|
 | RAM in use | ~7 GB of 64 GB |
-| VRAM in use | ~4.4 GB of 12 GB |
+| VRAM in use | ~4.4 GB of 24 GB |
 | Disk space | ~100 GB (includes OS, models, and translation packs) |
 
 *This server is significantly overpowered for OpenEar. The goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality.*
@@ -115,7 +115,7 @@ That's it. The setup script handles everything else.
 
 1. Clone or download the repo
 2. Right-click `setup.bat` → **Run as administrator**
-3. Wait for setup to complete (~5–15 minutes, downloads the ~3GB Whisper model)
+3. Wait for setup to complete (~15–30 minutes, downloads ~5.5GB of AI models)
 4. Start the server: `openear.bat start`
 5. Open `http://localhost/admin` to configure audio input
 6. Congregation connects at `http://<server-ip>` on any device on the same WiFi

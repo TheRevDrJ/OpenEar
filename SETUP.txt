@@ -138,8 +138,7 @@ expected. OpenEar runs entirely on your local network — no data leaves
 the building. There is no security risk. Just proceed past the warning.
 
 Clients can:
-  - Choose their language from the dropdown (if translation packs are
-    installed via the admin page)
+  - Choose their language from the dropdown (if enabled by the admin)
   - Adjust text size with the A+ / A- buttons
   - Toggle light/dark mode
 
@@ -166,19 +165,19 @@ All commands are run from a Command Prompt in the OpenEar folder.
 ============================================================================
 
 OpenEar can translate captions into other languages in real time.
-Translation runs locally using Argos Translate — no internet needed
-during services.
+Translation runs locally using Meta's NLLB-200 model — no internet
+needed during services. The translation model (~3GB) is downloaded
+automatically during setup and supports all 200 languages out of the box.
 
-To add a language:
+To enable a language:
   1. Go to the admin page
-  2. In the "Translation Languages" section, select a language from the
-     dropdown
-  3. Click "Install" (downloads ~50MB per language, requires internet)
-  4. The language is now available for clients to select
+  2. In the "Translation Languages" section, check the languages
+     you want to make available to your congregation
+  3. Clients can then select their preferred language from the dropdown
 
 Clients choose their language from the dropdown on the caption page.
 English captions have zero added latency. Translated captions have
-roughly 100ms additional delay — unnoticeable in practice.
+a small additional delay (typically 1-3 seconds) depending on hardware.
 
 
 ============================================================================
@@ -227,11 +226,11 @@ Browser shows "not secure" or "connection is not private"
   → Click "Advanced" and then "Proceed" (or similar, varies by browser)
 
 Captions are slow or inaccurate
-  → An NVIDIA GPU is required for real-time performance. CPU-only mode
-    works but is significantly slower.
   → Ensure your audio input is clear — check the audio level meter
     on the admin page
   → If the level meter shows "CLIPPING", turn down the input gain
+  → Transcription runs on CPU and should be near real-time. If it is
+    very slow, check that no other heavy processes are running.
 
 Server won't start on port 80
   → Another application may be using port 80 (Skype, IIS, etc.)
@@ -239,13 +238,15 @@ Server won't start on port 80
   → Stop the conflicting application, or contact the OpenEar community
     for help
 
-No GPU acceleration (Whisper running on CPU)
-  → Ensure you installed the full NVIDIA driver (Step 2), not just the
-    Windows built-in display driver
+Translation not working or very slow
+  → Ensure you installed the full NVIDIA Game Ready or Studio driver
+    (Step 2), not just the Windows built-in display driver
   → Run "nvidia-smi" to verify — if the command isn't found, you need
-    the NVIDIA driver
+    the full NVIDIA driver from nvidia.com
   → The setup script installs CUDA libraries automatically. You do NOT
     need to install the CUDA Toolkit separately.
+  → Note: transcription (Parakeet) runs on CPU by design and is fast.
+    The GPU is used for translation only.
 
 
 ============================================================================
