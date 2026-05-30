@@ -137,6 +137,7 @@ That's it. The setup script handles everything else.
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
 | v1.0 | Public release — automatically deployable for any church | ○ Planned |
+| v1.1 | Bidirectional translation — any language input, any language output | ○ Planned |
 
 ## Get Involved
 
