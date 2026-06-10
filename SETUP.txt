@@ -7,11 +7,18 @@ OpenEar is a free, open-source, real-time AI captioning and translation
 system designed for churches. It runs 100% locally — no internet required
 during services, no cloud subscriptions, no recurring costs.
 
-Requirements:
+Requirements for live captioning:
   - Windows 10 or 11
-  - NVIDIA GPU (RTX series recommended, 8GB+ VRAM)
+  - A modern multi-core CPU (Ryzen 5 / Core i5, ~2018 or newer)
   - Audio input (soundboard line-out, USB audio interface, or microphone)
   - WiFi network for client devices (phones, tablets)
+  - No graphics card needed. Transcription runs entirely on the CPU.
+
+To also add translation into other languages (optional):
+  - An NVIDIA graphics card with 6GB or more of VRAM, starting as low as
+    $250 (prices vary). Translation uses only ~4.5GB, so 6GB is plenty.
+    Look for a low-power, slot-powered model — it needs no supplemental
+    power connector and no power-supply upgrade.
 
 
 ============================================================================
@@ -33,16 +40,21 @@ You should see something like "Python 3.13.x".
 
 
 ============================================================================
-  STEP 2: Install NVIDIA Drivers
+  STEP 2: Install NVIDIA Drivers (only if adding translation)
 ============================================================================
 
-You MUST install the full NVIDIA drivers before running OpenEar.
+SKIP THIS STEP if you only want captioning. Captioning needs no graphics
+card and no NVIDIA drivers at all. This step applies only when you are
+adding translation.
+
+If you have installed an NVIDIA graphics card for translation, you MUST
+install the full NVIDIA driver — not the basic Windows one.
 
 IMPORTANT: Windows includes a basic display driver that will show your
 GPU name in Device Manager and display settings. This is NOT the same
 as the full NVIDIA driver. The Windows built-in driver does not include
-CUDA support, which OpenEar requires for GPU acceleration. You must
-download and install the driver directly from NVIDIA.
+CUDA support, which OpenEar's translation requires. You must download
+and install the driver directly from NVIDIA.
 
 1. Go to https://www.nvidia.com/drivers
 2. Find and download the correct driver for your GPU
@@ -167,7 +179,8 @@ All commands are run from a Command Prompt in the OpenEar folder.
 OpenEar can translate captions into other languages in real time.
 Translation runs locally using Meta's NLLB-200 model — no internet
 needed during services. The translation model (~3GB) is downloaded
-automatically during setup and supports all 200 languages out of the box.
+automatically during setup and supports 200+ languages and dialects out
+of the box.
 
 To enable a language:
   1. Go to the admin page

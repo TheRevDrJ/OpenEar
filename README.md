@@ -11,7 +11,7 @@
 
 ## What It Does
 
-OpenEar taps audio directly from your soundboard and uses [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA's fast, accurate speech recognition model) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any of 200 languages using [NLLB-200](https://ai.meta.com/research/no-language-left-behind/) (Meta's "No Language Left Behind"), a high-quality local translation model.
+OpenEar taps audio directly from your soundboard and uses [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA's fast, accurate speech recognition model) to transcribe sermons in real time. Captions stream to any phone, tablet, or display on your local Wi-Fi — in the original language or translated into any of 200+ languages and dialects using [NLLB-200](https://ai.meta.com/research/no-language-left-behind/) (Meta's "No Language Left Behind"), a high-quality local translation model.
 
 No app to install. No account to create. Just open a browser.
 
@@ -20,7 +20,7 @@ Everything runs locally. No audio leaves your building. No internet connection i
 ## Features
 
 - **Real-time captioning** — large, readable text streamed live to any device on the network
-- **Real-time translation** — 200 languages, any device, powered by Meta's NLLB-200 model
+- **Real-time translation** — 200+ languages and dialects, any device, powered by Meta's NLLB-200 model
 - **Server-side audio capture** — clean audio direct from the soundboard, not ambient room noise
 - **Personal, not projected** — captions appear on individual devices; those who need them get them, without a distracting overlay for everyone else
 - **Admin panel** — quality presets, settings, and controls for the sound booth operator
@@ -35,7 +35,7 @@ OpenEar is different:
 
 - **$0/month, $0/minute, forever.** Free and open source.
 - **Runs 100% locally.** No internet required during services. No audio leaves your building.
-- **One-time hardware cost — often $0.** OpenEar runs on an everyday Windows desktop with an NVIDIA GPU, and many churches already have a qualifying machine. If yours doesn't, a **$220 RTX 3050 (6 GB)** drops into almost any desktop — it's slot-powered, so no power connector and no power-supply upgrade are needed.
+- **One-time hardware cost — often $0.** Live captioning runs on an everyday Windows desktop — **no graphics card required.** Most churches already own a machine that qualifies. Adding translation into 200+ languages and dialects is an optional step that takes an **inexpensive NVIDIA graphics card — starting as low as $250.** Low-power models are slot-powered and drop into almost any PC with no power-supply upgrade.
 - **No cloud dependency.** Your sermons stay in your building.
 
 > *"We preach so that everyone can encounter God face to face. When technology can remove the glass, no one should have to pay for the window."*
@@ -43,29 +43,29 @@ OpenEar is different:
 
 ## Hardware Requirements
 
-### Minimum
+OpenEar grows with your needs. **Live captioning runs on hardware you almost certainly already have — no graphics card.** Translation into other languages is an optional step you can add later by dropping in a single inexpensive card.
+
+### For live captioning (no GPU needed)
 
 | Component | Spec |
 |-----------|------|
 | OS | Windows 10/11 (64-bit) |
-| CPU | AMD Ryzen 5 3600 / Intel Core i3-12100 |
+| CPU | Any modern multi-core CPU (Ryzen 5 / Core i5, ~2018 or newer) |
 | RAM | 8 GB |
-| GPU | NVIDIA 6 GB VRAM (RTX 3050 6 GB, GTX 1660 Super, RTX 2060) |
+| GPU | **None.** Transcription runs entirely on the CPU. |
 | Storage | 5 GB available |
 
-> **The cheapest path:** An **RTX 3050 6 GB** runs OpenEar flawlessly at about **$220 new** (available in bulk). OpenEar's translation model uses only ~4.5 GB of VRAM, so 6 GB is plenty. Best of all, the 6 GB card is **slot-powered** — it draws all its power from the PCIe slot itself, needs no supplemental power connector, and drops into almost any existing desktop with **no power-supply upgrade.** For most churches, that $220 card is the entire hardware cost.
->
-> **Buy the 6 GB version, not the 8 GB.** The 8 GB RTX 3050 requires a supplemental power connector — the 6 GB does not. For OpenEar, the 6 GB is both cheaper *and* easier to install.
+Captioning uses NVIDIA's Parakeet speech model, which runs on the CPU at roughly 34× real-time. No graphics card is involved at any point — this is the only way OpenEar does transcription, by design.
 
-### Recommended
+### To add translation (200+ languages)
+
+Translation uses Meta's NLLB-200 model, which runs on an NVIDIA GPU. Add one card and the same live captions begin flowing in any of 200+ languages and dialects.
 
 | Component | Spec |
 |-----------|------|
-| OS | Windows 10/11 (64-bit) |
-| CPU | AMD Ryzen 5 5600X / Intel Core i5-12400 or better |
-| RAM | 16 GB |
-| GPU | NVIDIA 8 GB VRAM (RTX 4060, RTX 3070) |
-| Storage | 5 GB available |
+| GPU | An **NVIDIA card with 6 GB+ VRAM** — starting as low as $250 |
+
+> **The cheapest path:** OpenEar's translation needs only ~4.5 GB of VRAM, so an inexpensive NVIDIA card with 6 GB or more is plenty — these start around **$250 new** (prices vary). Look for a **low-power, slot-powered model**: it draws all its power from the PCIe slot itself, needs no supplemental power connector, and drops into almost any existing PC with **no power-supply upgrade.** For most churches, that one card is the entire hardware cost.
 
 You also need a local network (church WiFi or a simple $30 router) for clients to connect.
 
@@ -75,12 +75,6 @@ You also need a local network (church WiFi or a simple $30 router) for clients t
 - Base model M4 Mac Mini (16GB unified memory, $599)
 - Transcription runs on CPU via Parakeet — translation limited without NVIDIA GPU
 - Status: v0.6 — actively being tested
-
-**NVIDIA Jetson Orin (in testing):**
-- Jetson Orin Nano Super ($249) — CUDA-native, same code path as desktop GPUs
-- 8GB unified memory with 1024 CUDA cores, tiny and silent form factor
-- Goal: sub-$300 dedicated church appliance
-- Status: v0.6 — hardware on order
 
 ### Reference Test Server
 
@@ -111,7 +105,7 @@ This is the actual hardware OpenEar is developed and tested on:
 ### Prerequisites
 
 1. **Python 3.13+** — install from the Microsoft Store (search "Python 3.13", click Get)
-2. **NVIDIA GPU drivers** — download the full **Game Ready** or **Studio** driver from [nvidia.com/drivers](https://www.nvidia.com/drivers). **Windows Update installs a basic display driver that does not include the CUDA runtime** — translation will fail silently if you use it. Even if `nvidia-smi` works, you may still be missing the CUDA runtime DLLs. Install the full driver from nvidia.com, restart, then run setup.
+2. **NVIDIA GPU drivers — only if you're adding translation.** Captioning needs no GPU and no drivers. If you've installed an NVIDIA graphics card for translation, download the full **Game Ready** or **Studio** driver from [nvidia.com/drivers](https://www.nvidia.com/drivers). **Windows Update installs a basic display driver that does not include the CUDA runtime** — translation will fail silently if you rely on it. Even if `nvidia-smi` works, you may still be missing the CUDA runtime DLLs. Install the full driver from nvidia.com, restart, then run setup.
 
 That's it. The setup script handles everything else.
 
@@ -136,7 +130,7 @@ That's it. The setup script handles everything else.
 | v0.3 | UI polish, quality presets, admin settings | ✓ Done |
 | v0.4 | Real-time translation — any language, any device | ✓ Done |
 | v0.5 | One-click installer | ✓ Done |
-| v0.6 | Mac Mini / Jetson Orin testing | ◐ In progress... |
+| v0.6 | Mac Mini M4 development | ◐ In progress... |
 | v0.7 | Testing at select churches | ◐ In progress... |
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
