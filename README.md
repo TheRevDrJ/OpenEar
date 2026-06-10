@@ -35,7 +35,7 @@ OpenEar is different:
 
 - **$0/month, $0/minute, forever.** Free and open source.
 - **Runs 100% locally.** No internet required during services. No audio leaves your building.
-- **One-time hardware cost.** A Windows PC with an NVIDIA GPU (~$1,000), or potentially a base Mac Mini M4 (~$600) — currently being tested.
+- **One-time hardware cost — often $0.** OpenEar runs on an everyday Windows desktop with an NVIDIA GPU, and many churches already have a qualifying machine. If yours doesn't, a **$220 RTX 3050 (6 GB)** drops into almost any desktop — it's slot-powered, so no power connector and no power-supply upgrade are needed.
 - **No cloud dependency.** Your sermons stay in your building.
 
 > *"We preach so that everyone can encounter God face to face. When technology can remove the glass, no one should have to pay for the window."*
@@ -50,8 +50,12 @@ OpenEar is different:
 | OS | Windows 10/11 (64-bit) |
 | CPU | AMD Ryzen 5 3600 / Intel Core i3-12100 |
 | RAM | 8 GB |
-| GPU | NVIDIA 6 GB VRAM (GTX 1660 Super, RTX 2060) |
+| GPU | NVIDIA 6 GB VRAM (RTX 3050 6 GB, GTX 1660 Super, RTX 2060) |
 | Storage | 5 GB available |
+
+> **The cheapest path:** An **RTX 3050 6 GB** runs OpenEar flawlessly at about **$220 new** (available in bulk). OpenEar's translation model uses only ~4.5 GB of VRAM, so 6 GB is plenty. Best of all, the 6 GB card is **slot-powered** — it draws all its power from the PCIe slot itself, needs no supplemental power connector, and drops into almost any existing desktop with **no power-supply upgrade.** For most churches, that $220 card is the entire hardware cost.
+>
+> **Buy the 6 GB version, not the 8 GB.** The 8 GB RTX 3050 requires a supplemental power connector — the 6 GB does not. For OpenEar, the 6 GB is both cheaper *and* easier to install.
 
 ### Recommended
 
