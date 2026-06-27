@@ -41,8 +41,8 @@ if defined RUNNING_PID (
     exit /b 0
 )
 
-:: Clean up any stale pythonw processes before starting
-for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='pythonw.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
+:: Clean up any stale OpenEar (server.py) pythonw before starting
+for /f "tokens=2" %%p in ('wmic process where "(name='pythonw3.13.exe' or name='pythonw.exe') and commandline like '%%server.py%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
     taskkill /F /PID %%p > nul 2>&1
 )
 ping 127.0.0.1 -n 2 > nul
@@ -102,7 +102,7 @@ if defined RUNNING_PID (
 )
 
 :: Kill any stale pythonw processes running server.py
-for /f "tokens=2" %%p in ('wmic process where "name='pythonw3.13.exe' or name='pythonw.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
+for /f "tokens=2" %%p in ('wmic process where "(name='pythonw3.13.exe' or name='pythonw.exe') and commandline like '%%server.py%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
     echo Killing stale pythonw process ^(PID: %%p^)...
     taskkill /F /PID %%p > nul 2>&1
     set "FOUND_SOMETHING=1"
