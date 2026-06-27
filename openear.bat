@@ -1,7 +1,7 @@
 @echo off
-:: OpenEar — Real-time AI captioning and translation for churches
+:: OpenEar - Real-time AI captioning and translation for churches
 :: Copyright (c) 2026 TheRevDrJ
-:: Licensed under AGPL-3.0 — see LICENSE file for details
+:: Licensed under AGPL-3.0 - see LICENSE file for details
 setlocal enabledelayedexpansion
 
 :: ============================================================================
@@ -48,7 +48,7 @@ ping 127.0.0.1 -n 2 > nul
 echo Starting OpenEar...
 start "" /b "%VENV_PYTHONW%" "%SERVER_SCRIPT%" %~2 > nul 2>&1
 
-:: Poll for port 80 — check every 3 seconds, timeout after 90 seconds
+:: Poll for port 80 - check every 3 seconds, timeout after 90 seconds
 set /a ELAPSED=0
 echo   Loading models...
 :start_wait
@@ -57,14 +57,14 @@ set /a ELAPSED+=3
 call :find_pid
 if defined RUNNING_PID goto start_success
 if !ELAPSED! geq 180 goto start_timeout
-if !ELAPSED! equ 60 echo   Still loading... ^(!ELAPSED!s^) — may be downloading models on first run
+if !ELAPSED! equ 60 echo   Still loading... ^(!ELAPSED!s^) - may be downloading models on first run
 if !ELAPSED! neq 60 echo   Still loading... ^(!ELAPSED!s^)
 goto start_wait
 
 :start_success
 echo !RUNNING_PID! > "%PID_FILE%"
 echo.
-echo   OpenEar is running ^(PID: !RUNNING_PID!^) — started in !ELAPSED!s
+echo   OpenEar is running ^(PID: !RUNNING_PID!^) - started in !ELAPSED!s
 echo.
 echo   Admin:  http://localhost/admin.html
 echo   Client: http://localhost
@@ -99,7 +99,7 @@ if defined RUNNING_PID (
     set "FOUND_SOMETHING=1"
 )
 
-:: Kill any stale OpenEar (server.py) pythonw — the helper kills only
+:: Kill any stale OpenEar (server.py) pythonw - the helper kills only
 :: server.py processes and exits with the count, so we know if anything ran.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%kill_openear.ps1"
 if errorlevel 1 set "FOUND_SOMETHING=1"
