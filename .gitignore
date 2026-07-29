@@ -221,3 +221,19 @@ text-logs/
 
 # Local-only docs (demo scripts, personal notes — not for public repo)
 DEMO.md
+
+# macOS Finder metadata
+# (added 2026-07-29, first time this project was opened on a Mac)
+.DS_Store
+**/.DS_Store
+
+# Downloaded model weights — ~12GB, fetched at setup time by download_model.py.
+# Never committed; setup re-downloads them. Dropbox backs them up regardless
+# of this rule, so nothing here is at risk of being lost.
+models/
+
+# Project-private working docs — wiring and running state, never public.
+# Comments stay on their own lines: an inline "# note" silently breaks the
+# pattern above it and the file it was meant to hide gets committed.
+rules_project.md
+STATE.md

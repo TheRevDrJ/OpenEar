@@ -1,0 +1,41 @@
+# .gitattributes — line-ending policy for OpenEar
+#
+# WHY THIS FILE EXISTS (do not delete):
+# OpenEar was built Windows-only and its history was committed from a Windows box
+# with core.autocrlf=true, so every blob in the repo is stored LF. When the project
+# was opened on macOS for the first time (2026-07-29) the working tree that Dropbox
+# had synced from Windows was CRLF on disk, and git reported 2,902 changed lines
+# across 12 files that contained zero real content changes.
+#
+# Pinning the policy here makes it structural instead of dependent on how each
+# machine's git happens to be configured.
+
+# Default: git normalizes text to LF in the repository, and checks it out LF.
+* text=auto eol=lf
+
+# CRITICAL — Windows shell scripts MUST be checked out CRLF on EVERY platform.
+# cmd.exe cannot parse an LF .bat file: labels and goto break, execution falls
+# through into whatever branch follows, and variables come back empty. A blank
+# port variable once turned a targeted taskkill into a machine-wide one and
+# crashed Jonathan's PC (see rules.md #12). Windows PowerShell 5.1 has the same
+# class of problem reading BOM-less script bytes. These two lines are the wall
+# that keeps an LF .bat from ever reaching Windows again.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets — never convert, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.mp3 binary
+*.bin binary
+*.pt binary
+*.onnx binary
