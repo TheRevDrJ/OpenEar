@@ -213,6 +213,10 @@ __marimo__/
 openear.log
 openear.log.*
 
+# Runtime state written by openear.bat start — the PID of the live server.
+# Machine-specific and meaningless anywhere else.
+openear.pid
+
 # Development/test tools (not for release)
 test/
 BENCHMARK_REPORT.md
