@@ -16,6 +16,61 @@ of the work.
 
 ---
 
+## 0.9.0 — Segment IDs make source/translation pairing exact
+
+*Fixes the logging mismatch that forced translation scoring to guess. Adds Spanish
+verification: 95.0% adequate, against Korean's 77.5%.*
+
+> **Note on release headings.** From this release forward, headings describe the change
+> rather than naming a theme (Jonathan's ruling, 2026-07-31). A changelog is read by
+> someone deciding whether they care, and "Second Language" does not help them decide.
+> Earlier entries keep their names — those releases had genuine themes.
+
+### Fixed
+- **The text logs were never 1:1, and nothing said so.** `source-en.txt` recorded every
+  incoming speech-recognition *fragment*, while `translated-<lang>.txt` recorded one line
+  per completed *sentence*. The translation buffer merges several fragments into a
+  sentence before translating, so a ten-fragment stretch produced eight translations and
+  the files silently disagreed. The pairing was destroyed at write time and no downstream
+  tool could recover it — which is why scoring had to guess by character length, and why
+  it guessed wrong on real data.
+
+  Both sides now log the **same unit** — the completed sentence — each stamped with a
+  shared, monotonic **segment ID**. Pairing is exact by construction rather than
+  reconstructed afterwards.
+- **A guard that was documented but never implemented.** `check_untranslated` claimed in
+  its own docstring to skip same-script language pairs, and did not. Every test until now
+  was English→Korean, where the scripts differ, so it had never fired. The first
+  English→Spanish run flagged all eight segments as "possibly untranslated" — Latin text
+  in a Latin-script target — and reported **0.0% structural integrity for a translation
+  that scored 95% adequate.**
+
+### Added
+- **`--rebuffer-source`** — replays the server's sentence-buffering rule over a legacy
+  fragment-level log, making historical runs comparable instead of unusable. This is what
+  turned the March 2026 Korean log from "80% delivery, two segments vanished" into its
+  true reading: 100% delivery, one damaged segment.
+- Three more calibration controls covering same-script pairs and confirming cross-script
+  detection still fires. **Twenty-one controls total.**
+
+### Measured
+Same source, same model, same parameters:
+
+| Language | Delivery | Structural integrity | Adequacy |
+|---|---|---|---|
+| Spanish | 100% | 100% | **95.0%** |
+| Korean | 100% | 87.5% | **77.5%** |
+
+- The gap is the expected one: Spanish is close to English in structure, Korean is
+  verb-final and must restructure — and restructuring is where clauses fall out. Spanish
+  kept the clause Korean dropped, kept "shadow" in "valley of the shadow of death", and
+  chose a register-neutral verb for "he's using us" where Korean chose one closer to
+  *exploiting*.
+- **The offline path was validated against production before any of this was trusted:**
+  re-translating the same source to Korean reproduced the March service log byte for byte.
+
+---
+
 ## 0.8.0 — "Accuracy Check"
 
 *A percentage that actually means "how much of the sermon got through."*
