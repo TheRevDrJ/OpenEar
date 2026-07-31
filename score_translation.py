@@ -114,12 +114,104 @@ class Pair:
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
-def load_segments(path: Path) -> list[str]:
-    """Read one segment per line, dropping blanks but preserving order."""
+_ID_LINE = __import__("re").compile(r"^(\d+)\t(.*)$")
+
+
+def load_segments(path: Path) -> tuple[list[str], list[str | None]]:
+    """Read one segment per line, returning (texts, ids).
+
+    Two accepted formats:
+
+      "00007\tSanctifying grace is the journey..."   <- ID-stamped (preferred)
+      "Sanctifying grace is the journey..."          <- legacy, no ID
+
+    OpenEar stamps a shared segment ID onto each completed sentence and every
+    translation of it (see server.py broadcast()). When both files carry IDs the
+    pairing is EXACT and no alignment guessing happens at all. Legacy logs written
+    before that change have no IDs and fall back to the length heuristic, which is
+    why the heuristic still exists rather than being deleted.
+    """
     if not path.exists():
         sys.exit(f"ERROR: no such file: {path}")
-    lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
-    return [ln for ln in lines if ln]
+    texts: list[str] = []
+    ids: list[str | None] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        m = _ID_LINE.match(line)
+        if m:
+            ids.append(m.group(1))
+            texts.append(m.group(2).strip())
+        else:
+            ids.append(None)
+            texts.append(line.strip())
+    return texts, ids
+
+
+def rebuffer(fragments: list[str]) -> list[str]:
+    """Reconstruct the sentences the translator actually saw, from raw fragments.
+
+    Legacy logs (before segment IDs) recorded one line per incoming ASR FRAGMENT
+    on the source side, while the target side recorded one line per completed
+    SENTENCE. Comparing them directly is meaningless — different units.
+
+    This replays server.py's exact buffering rule: accumulate fragments until the
+    buffer ends in sentence-terminating punctuation, then emit. Applied to an old
+    source log it reproduces the units NLLB was actually given, which makes
+    historical data comparable instead of unusable.
+
+    MUST STAY IN LOCKSTEP with `_sentence_end_re` and the accumulation in
+    server.py broadcast(). If that buffering rule changes, change it here too, or
+    every score computed from a legacy log silently drifts.
+    """
+    import re as _re
+    sentence_end = _re.compile(r"[.!?][\s]*$")
+    out: list[str] = []
+    buf = ""
+    for frag in fragments:
+        buf += (" " if buf else "") + frag
+        if sentence_end.search(buf):
+            out.append(buf.strip())
+            buf = ""
+    if buf.strip():
+        out.append(buf.strip())
+    return out
+
+
+def align_by_id(source: list[str], src_ids: list[str | None],
+                target: list[str], tgt_ids: list[str | None]) -> list[Pair]:
+    """Pair segments by their shared ID. Exact by construction, no heuristics.
+
+    A source ID with no matching target ID is a genuine drop — the sentence was
+    transcribed and never translated. Unlike the length-based path, that is a
+    fact rather than an inference, so the report can state it plainly.
+    """
+    tgt_by_id = {tid: (i, txt) for i, (tid, txt) in enumerate(zip(tgt_ids, target), 1)
+                 if tid is not None}
+    used: set[str] = set()
+    pairs: list[Pair] = []
+
+    for s_pos, (sid, s_txt) in enumerate(zip(src_ids, source), 1):
+        if sid is not None and sid in tgt_by_id:
+            t_pos, t_txt = tgt_by_id[sid]
+            used.add(sid)
+            pairs.append(Pair(op="match", source_indices=[s_pos],
+                              target_indices=[t_pos],
+                              source_text=s_txt, target_text=t_txt))
+        else:
+            pairs.append(Pair(op="dropped", source_indices=[s_pos],
+                              target_indices=[], source_text=s_txt, target_text=""))
+
+    for t_pos, (tid, t_txt) in enumerate(zip(tgt_ids, target), 1):
+        if tid is not None and tid not in used:
+            pairs.append(Pair(op="added", source_indices=[], target_indices=[t_pos],
+                              source_text="", target_text=t_txt))
+    return pairs
+
+
+def has_ids(ids: list[str | None]) -> bool:
+    return bool(ids) and all(i is not None for i in ids)
 
 
 # ── Script analysis ───────────────────────────────────────────────────────────
@@ -407,6 +499,23 @@ def check_untranslated(pairs: list[Pair], source_script: str) -> list[Finding]:
     pass. A check that cannot fail must never look like a check that passed.
     """
     findings: list[Finding] = []
+
+    # SAME-SCRIPT PAIRS: SKIP ENTIRELY.
+    #
+    # This guard was described in the docstring above from the first version and
+    # was NOT implemented — a comment promising behaviour the code did not have.
+    # It went unnoticed because every test until now was English->Korean, where
+    # the scripts differ. The first English->Spanish run flagged all 8 segments as
+    # "possibly untranslated" (Latin text in a Latin-script target, exactly as
+    # designed) and drove structural integrity to 0.0% on a translation that
+    # scored 95% adequate.
+    #
+    # A check that cannot fail must never masquerade as a check that passed, and a
+    # check that cannot succeed must never masquerade as a failure.
+    target_script = dominant_script(" ".join(p.target_text for p in pairs))
+    if target_script == source_script or target_script == "NONE":
+        return findings
+
     for p in pairs:
         if not p.target_text or p.op in ("dropped",):
             continue
@@ -493,8 +602,15 @@ def render_report(meta: dict, pairs: list[Pair], findings: list[Finding],
     out.append("> mistranslation still scores 100%. Treat these as a floor, not a grade.\n")
 
     if conf == "exact":
-        out.append("> **Alignment: exact.** Source and target segment counts match, so")
-        out.append("> pairings are correct by construction.\n")
+        method = meta.get("alignment_method", "")
+        if method == "segment-id":
+            out.append("> **Alignment: exact (segment IDs).** Both logs carry the shared")
+            out.append("> ID OpenEar stamps on each completed sentence, so pairings are")
+            out.append("> correct by construction and a missing translation is a *fact*,")
+            out.append("> not an inference.\n")
+        else:
+            out.append("> **Alignment: exact.** Source and target segment counts match, so")
+            out.append("> pairings are correct by construction.\n")
     else:
         out.append("> ⚠️ **Alignment: HEURISTIC — pairings below are guesses.** The counts")
         out.append("> disagree, so segments were matched by character length, which cannot")
@@ -863,6 +979,46 @@ def self_test() -> int:
     check("truncated segment still reports 100% delivery (counts match)",
           d == 100.0, f"got {d} — delivery must not silently absorb content loss")
 
+    # 4a. Same-script pairs (en->es) must NOT trip the untranslated check. This
+    #     regression drove structural integrity to 0% on a 95%-adequate Spanish
+    #     translation, because the guard was documented but never written.
+    _GOOD_ES = [
+        "La gracia te encuentra exactamente donde estás.",
+        "No espera a que te vuelvas digno primero.",
+        "Y luego se niega a dejarte como te encontró.",
+        "Ese es todo el escándalo del evangelio.",
+    ]
+    d, s, f, conf = _run_case(_GOOD_EN, _GOOD_ES)
+    check("same-script pair (en->es) is not flagged as untranslated",
+          not any(x.kind == "possibly_untranslated" for x in f),
+          f"got {[x.kind for x in f]}")
+    check("same-script pair scores full structural integrity", s == 100.0, f"got {s}")
+    check("cross-script check still fires when scripts differ",
+          any(x.kind == "possibly_untranslated"
+              for x in _run_case(_GOOD_EN, [_GOOD_KO[0], _GOOD_KO[1],
+                                            "This line was never translated.",
+                                            _GOOD_KO[3]])[2]),
+          "cross-script detection broke while fixing the same-script case")
+
+    # 4b. ID-based pairing must be exact, and must report a missing translation
+    #     as a fact rather than inferring one from lengths.
+    ids = ["1", "2", "3", "4"]
+    p = align_by_id(_GOOD_EN, ids, _GOOD_KO, ids)
+    check("segment IDs pair every segment exactly",
+          all(x.op == "match" for x in p) and len(p) == 4,
+          f"got {[x.op for x in p]}")
+    check("ID pairing survives reordered target lines",
+          all(x.op == "match" for x in align_by_id(
+              _GOOD_EN, ids, list(reversed(_GOOD_KO)), list(reversed(ids)))),
+          "reordering the target file broke ID pairing")
+    p = align_by_id(_GOOD_EN, ids, _GOOD_KO[:2], ids[:2])
+    check("a source ID with no translation is reported dropped",
+          sum(1 for x in p if x.op == "dropped") == 2,
+          f"got {[x.op for x in p]}")
+    check("has_ids rejects a partially-stamped file",
+          not has_ids(["1", None, "3"]) and has_ids(["1", "2"]),
+          "has_ids is wrong")
+
     # 5-7. The judge-validation must itself be validated. A worksheet scored by a
     #      rubber-stamping judge has to come back VOID, or Layer 2 is decoration.
     pairs = align(_GOOD_EN, _GOOD_KO)
@@ -937,6 +1093,10 @@ def main() -> None:
     ap.add_argument("--worksheet-in", type=Path,
                     help="LAYER 2 step 3: read a filled worksheet and score adequacy. "
                          "Expects <path>.key.json beside it.")
+    ap.add_argument("--rebuffer-source", action="store_true",
+                    help="Legacy logs only: re-apply server.py's sentence buffering to a "
+                         "fragment-level source log, so it matches the sentence-level "
+                         "target log. Not needed for ID-stamped logs.")
     ap.add_argument("--seed", type=int, default=1517,
                     help="Shuffle seed, so a worksheet is reproducible.")
     args = ap.parse_args()
@@ -947,11 +1107,21 @@ def main() -> None:
     if not args.source or not args.target:
         ap.error("--source and --target are required (or use --self-test)")
 
-    source = load_segments(args.source)
-    target = load_segments(args.target)
+    source, src_ids = load_segments(args.source)
+    target, tgt_ids = load_segments(args.target)
+
+    if args.rebuffer_source:
+        before = len(source)
+        source = rebuffer(source)
+        src_ids = [None] * len(source)
+        print(f"Re-buffered source: {before} fragments -> {len(source)} sentences "
+              f"(the units the translator actually received)")
     src_script = dominant_script(" ".join(source))
 
-    pairs = align(source, target)
+    # Exact pairing when both logs carry segment IDs; heuristic only for legacy.
+    id_based = has_ids(src_ids) and has_ids(tgt_ids)
+    pairs = (align_by_id(source, src_ids, target, tgt_ids) if id_based
+             else align(source, target))
     findings = (check_structure(source, target, pairs)
                 + check_lengths(pairs)
                 + check_untranslated(pairs, src_script))
@@ -961,7 +1131,8 @@ def main() -> None:
         "source_file": str(args.source), "target_file": str(args.target),
         "source_segments": len(source), "target_segments": len(target),
         "target_lang": args.target_lang, "source_script": src_script,
-        "alignment_confidence": alignment_confidence(source, target),
+        "alignment_confidence": "exact" if id_based else alignment_confidence(source, target),
+        "alignment_method": "segment-id" if id_based else "character-length heuristic",
         "delivery_rate": delivery_rate(source, target),
     }
 

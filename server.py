@@ -425,6 +425,11 @@ import re
 _sentence_end_re = re.compile(r'[.!?][\s]*$')
 _translation_buffer: str = ""
 
+# Monotonic ID stamped onto each completed sentence and every translation of it,
+# so the text logs pair exactly instead of being re-guessed by a scoring tool.
+# Resets per server run; the logs are append-only per session.
+_segment_counter: int = 0
+
 
 async def broadcast(message: dict):
     """Send a JSON message to every connected WebSocket client.
@@ -442,13 +447,10 @@ async def broadcast(message: dict):
     global _translation_buffer
     disconnected = set()
 
+    global _segment_counter
+
     if message.get("type") == "transcript":
         english_text = message["text"]
-
-        # Log original English text
-        if LOG_TEXT:
-            with open(TEXT_LOG_DIR / "source-en.txt", "a", encoding="utf-8") as f:
-                f.write(english_text + "\n")
 
         # Accumulate text until we have a complete sentence
         _translation_buffer += (" " if _translation_buffer else "") + english_text
@@ -456,6 +458,33 @@ async def broadcast(message: dict):
         if _sentence_end_re.search(_translation_buffer):
             complete_text = _translation_buffer.strip()
             _translation_buffer = ""
+
+            # ── Segment ID: the unit of comparison for quality scoring ────────
+            #
+            # WHY THE SOURCE IS LOGGED *HERE* AND NOT WHERE THE FRAGMENT ARRIVED.
+            #
+            # This used to log every incoming ASR fragment to source-en.txt, while
+            # translations were logged once per COMPLETED SENTENCE below. Those are
+            # two different units: the buffer merges several fragments into one
+            # sentence before translating. So the two log files were never 1:1 --
+            # a 10-fragment stretch would produce 8 translated sentences, and
+            # nothing said so.
+            #
+            # That silently destroyed the pairing at write time, and no downstream
+            # tool could recover it: score_translation.py had to guess which source
+            # line produced which translation using character length, which cannot
+            # see meaning and got it wrong on real data.
+            #
+            # Now both sides log the SAME unit -- the completed sentence -- stamped
+            # with a shared, monotonic segment ID. Pairing is exact by construction
+            # rather than reconstructed by heuristic afterwards. Data you have to
+            # consult is a rule; data baked into the artifact is a fact.
+            _segment_counter += 1
+            segment_id = _segment_counter
+
+            if LOG_TEXT:
+                with open(TEXT_LOG_DIR / "source-en.txt", "a", encoding="utf-8") as f:
+                    f.write(f"{segment_id:05d}\t{complete_text}\n")
 
             # Translate once per language, send to all clients
             translation_cache: dict[str, str] = {"en": complete_text}
@@ -469,10 +498,11 @@ async def broadcast(message: dict):
                         )
                         translation_cache[lang] = translated
 
-                        # Log translated text
+                        # Log translated text, stamped with the SAME segment ID as
+                        # its source above, so scoring pairs them exactly.
                         if LOG_TEXT:
                             with open(TEXT_LOG_DIR / f"translated-{lang}.txt", "a", encoding="utf-8") as f:
-                                f.write(translated + "\n")
+                                f.write(f"{segment_id:05d}\t{translated}\n")
 
                     await client.send_json({
                         "type": "transcript",
