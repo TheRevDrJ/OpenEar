@@ -223,6 +223,10 @@ BENCHMARK_REPORT.md
 text-logs/
 *.tmp.*
 
+# Generated translation-integrity reports. Regenerable from the logs, and they
+# quote sermon text verbatim, so they stay out of the repo. Dropbox backs them up.
+reports/
+
 # Local-only docs (demo scripts, personal notes — not for public repo)
 DEMO.md
 
