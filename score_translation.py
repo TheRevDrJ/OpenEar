@@ -831,6 +831,56 @@ def build_comparison_worksheet(source: list[str], systems: dict[str, list[str]],
             {"seed": seed, "key": key})
 
 
+def chunk_worksheet(worksheet: dict, keyfile: dict, size: int) -> list[tuple[dict, dict]]:
+    """Split a worksheet into independently-validatable chunks.
+
+    WHY EVERY CHUNK CARRIES ITS OWN CONTROLS.
+
+    Once a corpus is large enough to need several judges, a single global control
+    set stops meaning anything: it tells you that SOMEBODY was calibrated, not
+    that the judge who scored segment 147 was. One bad judge in a panel of twelve
+    would be invisible, and their scores would silently move the average.
+
+    So chunks are cut so that each one contains a proportional share of the
+    controls. A chunk with no controls is not a smaller job — it is an unverifiable
+    one, and ingest refuses to trust it.
+
+    Chunks preserve the interleaving: each still contains output from every system,
+    unlabelled, so within-chunk comparison stays valid even if one judge runs
+    harsher than another. That is the point of the design — a judge's absolute
+    calibration can drift, but their RANKING of two systems seen side by side in
+    the same sitting is what we actually read.
+    """
+    items = worksheet["items"]
+    key = keyfile["key"]
+    real = [i for i in items if key.get(i["id"], {}).get("kind") == "real"]
+    ctrl = [i for i in items if key.get(i["id"], {}).get("kind") != "real"]
+
+    n_chunks = max(1, (len(real) + size - 1) // size)
+    if len(ctrl) < n_chunks:
+        raise SystemExit(
+            f"Cannot chunk: {len(ctrl)} controls across {n_chunks} chunks would leave "
+            f"some unverifiable. Use a larger --chunk-size or generate more controls.")
+
+    buckets: list[list[dict]] = [[] for _ in range(n_chunks)]
+    for idx, item in enumerate(real):
+        buckets[idx % n_chunks].append(item)
+    for idx, item in enumerate(ctrl):
+        buckets[idx % n_chunks].append(item)
+
+    out = []
+    for n, bucket in enumerate(buckets, 1):
+        ids = {i["id"] for i in bucket}
+        out.append((
+            {"_instructions": worksheet["_instructions"],
+             "_note": worksheet["_note"] + f"  (chunk {n} of {n_chunks})",
+             "items": bucket},
+            {"seed": keyfile.get("seed"), "chunk": n,
+             "key": {k: v for k, v in key.items() if k in ids}},
+        ))
+    return out
+
+
 def ingest_comparison(worksheet: dict, keyfile: dict) -> dict:
     """Per-system adequacy from a head-to-head worksheet, with shared controls."""
     key = keyfile["key"]
@@ -1201,6 +1251,12 @@ def main() -> None:
                          "e.g. --compare nllb=a.txt --compare madlad=b.txt. Combine with "
                          "--worksheet-out to build a blind worksheet, then --worksheet-in "
                          "to score every system in a single sitting.")
+    ap.add_argument("--chunk-size", type=int, default=None, metavar="N",
+                    help="Split the worksheet into chunks of ~N real items, each carrying "
+                         "its own calibration controls so every judge is independently "
+                         "verifiable. Required once a corpus needs more than one judge.")
+    ap.add_argument("--merge", nargs="+", type=Path, metavar="FILE",
+                    help="Ingest several filled chunk worksheets and aggregate them.")
     ap.add_argument("--rebuffer-source", action="store_true",
                     help="Legacy logs only: re-apply server.py's sentence buffering to a "
                          "fragment-level source log, so it matches the sentence-level "
@@ -1234,15 +1290,76 @@ def main() -> None:
         if args.worksheet_out:
             ws, kf = build_comparison_worksheet(src, systems, args.seed)
             args.worksheet_out.parent.mkdir(parents=True, exist_ok=True)
+            n_ctrl = sum(1 for v in kf["key"].values() if v["kind"] != "real")
+
+            if args.chunk_size:
+                chunks = chunk_worksheet(ws, kf, args.chunk_size)
+                stem = args.worksheet_out.with_suffix("")
+                for n, (cws, ckf) in enumerate(chunks, 1):
+                    cp = Path(f"{stem}-{n:02d}.json")
+                    cp.write_text(json.dumps(cws, ensure_ascii=False, indent=2),
+                                  encoding="utf-8")
+                    Path(f"{cp}.key.json").write_text(
+                        json.dumps(ckf, ensure_ascii=False, indent=2), encoding="utf-8")
+                nc = [sum(1 for v in c[1]["key"].values() if v["kind"] != "real")
+                      for c in chunks]
+                print(f"Head-to-head worksheet split into {len(chunks)} chunks: "
+                      f"{stem}-NN.json")
+                print(f"  {len(systems)} systems x {len(src)} segments + {n_ctrl} controls")
+                print(f"  controls per chunk: {nc} (every chunk independently verifiable)")
+                return
+
             args.worksheet_out.write_text(json.dumps(ws, ensure_ascii=False, indent=2),
                                           encoding="utf-8")
             kp = args.worksheet_out.with_suffix(args.worksheet_out.suffix + ".key.json")
             kp.write_text(json.dumps(kf, ensure_ascii=False, indent=2), encoding="utf-8")
-            n_ctrl = sum(1 for v in kf["key"].values() if v["kind"] != "real")
             print(f"Head-to-head worksheet: {args.worksheet_out}")
             print(f"  {len(systems)} systems x {len(src)} segments + {n_ctrl} controls, "
                   f"shuffled and unlabelled (seed {args.seed})")
             print(f"  Answer key: {kp}  — keep away from the judge.")
+            return
+
+        if args.merge:
+            # Each chunk is validated ON ITS OWN. A judge who failed calibration is
+            # dropped entirely rather than averaged in — one rubber-stamping judge
+            # in a panel of twelve would otherwise be invisible while quietly
+            # moving the result.
+            totals: dict[str, list[float]] = {}
+            accepted, rejected = 0, []
+            for path in sorted(args.merge):
+                kp = Path(f"{path}.key.json")
+                if not kp.exists():
+                    sys.exit(f"ERROR: missing key for {path}")
+                res = ingest_comparison(
+                    json.loads(path.read_text(encoding="utf-8")),
+                    json.loads(kp.read_text(encoding="utf-8")))
+                if not res["valid"]:
+                    rejected.append((path.name, "; ".join(res["reasons"])))
+                    continue
+                accepted += 1
+                for name, v in res["systems"].items():
+                    totals.setdefault(name, []).extend([v["adequacy"]] * v["segments"])
+
+            print(f"\nMerged {accepted} chunk(s); {len(rejected)} rejected.\n")
+            for name, why in rejected:
+                print(f"  REJECTED {name}: {why}")
+            if not totals:
+                sys.exit("No chunk passed calibration. No figures reported.")
+            print("\nHead-to-head adequacy (panel)\n")
+            width = max(len(k) for k in totals)
+            for name, vals in sorted(totals.items(),
+                                     key=lambda kv: -sum(kv[1]) / len(kv[1])):
+                print(f"  {name.ljust(width)}  {sum(vals) / len(vals):6.1f}%   "
+                      f"({len(vals)} segments)")
+            if args.json:
+                args.json.parent.mkdir(parents=True, exist_ok=True)
+                args.json.write_text(json.dumps(
+                    {"accepted_chunks": accepted,
+                     "rejected": [{"chunk": c, "why": w} for c, w in rejected],
+                     "systems": {k: {"adequacy": sum(v) / len(v), "segments": len(v)}
+                                 for k, v in totals.items()}},
+                    ensure_ascii=False, indent=2), encoding="utf-8")
+                print(f"\n  JSON written: {args.json}")
             return
 
         if args.worksheet_in:
