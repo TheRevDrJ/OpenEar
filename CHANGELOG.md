@@ -16,6 +16,50 @@ of the work.
 
 ---
 
+## 0.7.0 — "Instrument"
+
+*We can measure translation quality now, instead of having opinions about it.*
+
+OpenEar has had translation accuracy figures before — roughly 97% for Spanish, 85% for
+Korean. They were real, and they were produced by a person reading parallel text side by
+side once. That meant they could not be re-run, could not be compared against a later
+version, and could not answer the only question that matters when you change something:
+*did that make it better or worse?*
+
+This release turns that measurement into a tool that writes its answer to a file.
+
+### Added
+- **`score_translation.py`** — translation integrity scoring. Takes source and translated
+  text, one segment per line (exactly what `--log-text` already writes), and reports how
+  much of the source survived. Emits markdown and JSON.
+  - **No dependencies.** Standard library only — no model, no network, no API key, and
+    **no reference translation required.** It runs anywhere, forever.
+  - Reports **delivery rate** (pure arithmetic on segment counts) separately from
+    **structural integrity** (which depends on per-segment alignment), because the first
+    is always trustworthy and the second sometimes is not.
+  - Detects dropped segments, merged segments, suspiciously short output (the fingerprint
+    of a lost clause), text left untranslated in the source script, and empty output.
+- **`--self-test`** — nine calibration controls run against deliberately corrupted
+  fixtures. If the tool stops detecting a defect it is built to catch, it fails loudly and
+  declares its own numbers untrustworthy. An evaluation tool that has never been shown to
+  catch a known defect is an opinion generator, not an instrument.
+
+### Notes
+- **First measured baseline.** Our own 2026-03-26 Korean service log scores **80.0%
+  delivery, 60.0% structural integrity**. Ten English segments produced eight Korean
+  ones, and the clause *"into the richness of a good creation that God is actively
+  working to restore"* never reached the listener. Nothing reported a problem at the time.
+- **Scope, stated honestly.** This measures *delivery, not quality*. A fluent
+  mistranslation scores 100%. It is a floor, not a grade. Per-segment meaning judgment is
+  the next layer.
+- **A known limitation, measured rather than assumed.** When segment counts disagree,
+  pairings are heuristic and can be wrong — character length cannot see meaning, and on
+  the log above the correct alignment scores *worse* than an incorrect one. The tool says
+  so in its own report rather than presenting guesses as findings.
+- No change to captioning, translation, or the client. This is bench equipment.
+
+---
+
 ## 0.6.0 — "Landfall"
 
 *The project comes ashore on macOS.*
