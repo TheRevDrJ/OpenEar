@@ -502,6 +502,51 @@ def render_report(meta: dict, pairs: list[Pair], findings: list[Finding],
         out.append("> four segments and pointed blame one line from the real damage. Trust")
         out.append("> the delivery rate and the count mismatch; verify every pairing by eye.\n")
 
+    adq = meta.get("adequacy")
+    if adq:
+        out.append("## Adequacy (Layer 2 — did the meaning survive?)\n")
+        if adq["valid"] and adq["adequacy"] is not None:
+            out.append(f"### {adq['adequacy']:.1f}% adequate  "
+                       f"({adq['segments_judged']} segments judged)\n")
+            if conf != "exact":
+                # Layer 2 inherits Layer 1's uncertainty and this must be said out
+                # loud. The judge scores the PAIRS it is handed. If the aligner
+                # handed it a mis-paired source and target, the judge correctly
+                # scores that pair near zero -- and the resulting figure measures
+                # ALIGNMENT failure, not TRANSLATION failure. The two are
+                # indistinguishable in the aggregate, so the number understates the
+                # translator by an unknown amount. Do not quote it as a translation
+                # accuracy; quote it as a pipeline figure, or fix the alignment.
+                out.append("> ⚠️ **This figure is depressed by alignment error and is NOT a")
+                out.append("> translator accuracy.** Segment counts disagreed, so pairings")
+                out.append("> were guessed by length. A mis-paired segment is correctly")
+                out.append("> scored near zero by the judge — but that penalises the")
+                out.append("> *aligner*, not the translation. Segments marked `wrong` below")
+                out.append("> are the ones to inspect first: check whether the candidate is")
+                out.append("> a bad translation or simply a good translation of a")
+                out.append("> *different* source line.\n")
+            if adq["categories"]:
+                out.append("| Category | Segments |")
+                out.append("|---|---|")
+                for c, n in sorted(adq["categories"].items(), key=lambda kv: -kv[1]):
+                    out.append(f"| {c} | {n} |")
+                out.append("")
+        else:
+            out.append("### VOID — the judge failed its calibration controls.\n")
+            out.append("> No adequacy figure is reported. A number from an instrument that")
+            out.append("> cannot tell right from wrong is worse than no number at all.\n")
+
+        ctrl = adq["controls"]
+        out.append("**Judge calibration**\n")
+        out.append("| Control | Scores | Must be |")
+        out.append("|---|---|---|")
+        out.append(f"| Mismatched pairs | {ctrl['mismatch']} | ≤ 30 |")
+        out.append(f"| Truncated candidates | {ctrl['truncated']} | well below real mean |")
+        rm = ctrl["real_mean"]
+        out.append(f"| Real segments (mean) | {rm:.0f} | — |" if rm is not None
+                   else "| Real segments (mean) | — | — |")
+        out.append("")
+
     out.append(f"**{counts['critical']} critical · {counts['warning']} warning · "
                f"{counts['info']} info**\n")
 
@@ -527,6 +572,217 @@ def render_report(meta: dict, pairs: list[Pair], findings: list[Finding],
         out.append(f"| {idx} | {p.op} | {s} | {t} |")
     out.append("")
     return "\n".join(out)
+
+
+# ── Layer 2: blind adequacy judging ───────────────────────────────────────────
+#
+# Layer 1 asks "did output arrive?". Layer 2 asks "did the MEANING arrive?" — the
+# question that actually decides whether a congregant understood the sermon.
+#
+# WHY A WORKSHEET INSTEAD OF CALLING A JUDGE DIRECTLY
+# ---------------------------------------------------
+# The obvious design is to have the tool call a model and return a score. We are
+# not doing that, for three reasons:
+#
+#   1. AUDITABILITY. A number with no visible evidence is exactly what we are
+#      replacing. Here the questions and the answers are files on disk: anyone can
+#      read precisely what the judge was shown and precisely what it said.
+#   2. THE JUDGE SHOULD NOT BE BAKED IN. Today the best available judge is a
+#      capable LLM; tomorrow it may be a local model, or an actual Korean speaker.
+#      Same protocol, comparable numbers, no rewrite.
+#   3. CONFLICT OF INTEREST. Whoever built the translation pipeline should not be
+#      the unblinded judge of its output. The worksheet strips system identity,
+#      shuffles order, and salts in controls, so a judge cannot favour a system
+#      even if it wanted to — including me favouring something I built.
+#
+# HOW THE CONTROLS WORK, AND WHY THEY NEED NO GOLD TRANSLATION
+# -------------------------------------------------------------
+# We cannot manufacture a known-CORRECT translation for an arbitrary language
+# without a reference. But we can manufacture known-WRONG ones from the data
+# itself, and negative controls are enough to prove a judge discriminates:
+#
+#   * MISMATCH  — a source segment paired with a DIFFERENT segment's translation.
+#                 Must score near zero. If it doesn't, the judge is rubber-stamping.
+#   * TRUNCATED — a source segment paired with the first ~40% of its own
+#                 translation. Must score clearly below the real segments. If it
+#                 doesn't, the judge is blind to omission, which is the exact
+#                 failure mode we care most about.
+#
+# A judge that passes these has demonstrated it can tell wrong from right on THIS
+# data. A judge that fails them voids the run — the report says so and reports no
+# adequacy figure at all, because a number from a broken instrument is worse than
+# no number.
+
+RUBRIC = """\
+You are scoring TRANSLATION ADEQUACY for a live church captioning system. A preacher
+speaks English; congregants read the translation on their phones in real time.
+
+For each item you are given a SOURCE segment and a CANDIDATE translation. Score how
+much of the source's MEANING survived.
+
+Score 0-100:
+  100  Complete. Every idea in the source is present and correctly rendered.
+   80  Minor loss. A nuance, connotation, or modifier is off, but a listener would
+       take away the same point.
+   50  Major loss. A clause, qualifier, or key idea is missing or altered. The
+       listener gets a different or thinner point.
+   20  Wrong. The candidate asserts something the source did not, or omits the
+       central idea.
+    0  Unusable. Untranslated, empty, or unrelated to the source.
+
+Also assign one CATEGORY: complete | minor_loss | major_loss | wrong | unusable
+
+RULES:
+  * Judge MEANING, not wording. A completely different phrasing that carries the
+    same meaning scores 100. There are many valid ways to say a thing.
+  * Do NOT reward fluency. Beautiful text that dropped a clause is major_loss.
+  * Omission is the failure that matters most here. If content in the source is
+    absent from the candidate, say so explicitly in your note.
+  * Register counts. A word that is technically adequate but carries the wrong
+    connotation for a sermon (e.g. rendering "he is using us" with a verb closer
+    to "exploiting us") is at best minor_loss, and say why.
+  * The source may contain speech-recognition errors — duplicated words, broken
+    sentence boundaries. Judge the translation against what the source SAYS, not
+    against what you think the preacher meant. Note it if the source is damaged.
+  * You do not know which system produced any candidate, and items are in random
+    order. Do not try to infer it.
+
+Fill in "score", "category", and a one-sentence "note" for EVERY item. Leave
+everything else untouched.
+"""
+
+
+def build_worksheet(pairs: list[Pair], seed: int) -> tuple[dict, dict]:
+    """Produce a blind judging worksheet and its private answer key.
+
+    The worksheet is what the judge sees; the key is what the harness uses to
+    unshuffle, separate controls from real data, and score. They MUST stay in
+    separate files — a judge who can see the key is not blind.
+    """
+    import random
+    rng = random.Random(seed)
+
+    real = [p for p in pairs if p.source_text and p.target_text
+            and p.op not in ("dropped", "added")]
+
+    items: list[dict] = []
+    key: dict[str, dict] = {}
+
+    def add(kind: str, source: str, candidate: str, src_idx: int | None) -> None:
+        item_id = f"item_{len(items) + 1:03d}"
+        items.append({"id": item_id, "source": source, "candidate": candidate,
+                      "score": None, "category": None, "note": None})
+        key[item_id] = {"kind": kind, "source_index": src_idx}
+
+    for p in real:
+        add("real", p.source_text, p.target_text,
+            p.source_indices[0] if p.source_indices else None)
+
+    # Negative controls: roughly one per four real items, minimum two of each,
+    # so a run always carries enough signal to catch a rubber-stamping judge.
+    n_controls = max(2, len(real) // 4)
+
+    if len(real) >= 2:
+        for _ in range(n_controls):
+            a, b = rng.sample(range(len(real)), 2)
+            add("control_mismatch", real[a].source_text, real[b].target_text, None)
+
+    for _ in range(n_controls):
+        p = real[rng.randrange(len(real))] if real else None
+        if not p:
+            break
+        cut = max(1, int(len(p.target_text) * 0.4))
+        add("control_truncated", p.source_text, p.target_text[:cut], None)
+
+    rng.shuffle(items)
+
+    worksheet = {
+        "_instructions": RUBRIC,
+        "_note": ("Some items are deliberately corrupted quality controls. You are not "
+                  "told which. Score every item on its own merits."),
+        "items": items,
+    }
+    return worksheet, {"seed": seed, "key": key}
+
+
+def ingest_worksheet(worksheet: dict, keyfile: dict) -> tuple[dict, list[Finding]]:
+    """Score a filled worksheet, validating the judge before trusting it."""
+    key = keyfile["key"]
+    findings: list[Finding] = []
+
+    scored = {i["id"]: i for i in worksheet.get("items", [])
+              if i.get("score") is not None}
+    missing = [i["id"] for i in worksheet.get("items", []) if i.get("score") is None]
+
+    def scores_for(kind: str) -> list[float]:
+        return [float(scored[i]["score"]) for i in scored
+                if key.get(i, {}).get("kind") == kind]
+
+    real_scores = scores_for("real")
+    mismatch = scores_for("control_mismatch")
+    truncated = scores_for("control_truncated")
+
+    valid = True
+
+    if missing:
+        valid = False
+        findings.append(Finding(
+            severity="critical", kind="worksheet_incomplete",
+            detail=f"{len(missing)} item(s) were not scored: {', '.join(missing[:5])}"
+                   f"{'...' if len(missing) > 5 else ''}. Adequacy cannot be computed."))
+
+    # A mismatched pair is unrelated text. Anything above 30 means the judge is
+    # not actually reading the pairing.
+    if mismatch:
+        worst = max(mismatch)
+        if worst > 30:
+            valid = False
+            findings.append(Finding(
+                severity="critical", kind="control_failed_mismatch",
+                detail=(f"A mismatched control (source paired with an unrelated "
+                        f"translation) scored {worst:.0f}. The judge is not "
+                        f"discriminating; this run's adequacy figure is void.")))
+
+    # Truncated candidates are missing ~60% of their content. They must land
+    # clearly below the real segments, or the judge cannot see omission.
+    if truncated and real_scores:
+        avg_trunc = sum(truncated) / len(truncated)
+        avg_real = sum(real_scores) / len(real_scores)
+        if avg_trunc >= avg_real - 15:
+            valid = False
+            findings.append(Finding(
+                severity="critical", kind="control_failed_truncation",
+                detail=(f"Truncated controls averaged {avg_trunc:.0f} against "
+                        f"{avg_real:.0f} for real segments. The judge is not "
+                        f"detecting omission — the failure this tool exists to "
+                        f"catch. Adequacy figure is void.")))
+
+    for item_id, item in scored.items():
+        if key.get(item_id, {}).get("kind") != "real":
+            continue
+        if float(item["score"]) < 60:
+            findings.append(Finding(
+                severity="warning", kind="low_adequacy_segment",
+                detail=(f"Scored {float(item['score']):.0f} "
+                        f"({item.get('category', '?')}): {item.get('note', '')}"),
+                source_index=key[item_id].get("source_index")))
+
+    result = {
+        "valid": valid,
+        "adequacy": (sum(real_scores) / len(real_scores)) if (real_scores and valid) else None,
+        "segments_judged": len(real_scores),
+        "controls": {
+            "mismatch": mismatch,
+            "truncated": truncated,
+            "real_mean": (sum(real_scores) / len(real_scores)) if real_scores else None,
+        },
+        "categories": {},
+    }
+    for item_id, item in scored.items():
+        if key.get(item_id, {}).get("kind") == "real" and item.get("category"):
+            c = item["category"]
+            result["categories"][c] = result["categories"].get(c, 0) + 1
+    return result, findings
 
 
 # ── Self-test ─────────────────────────────────────────────────────────────────
@@ -607,6 +863,45 @@ def self_test() -> int:
     check("truncated segment still reports 100% delivery (counts match)",
           d == 100.0, f"got {d} — delivery must not silently absorb content loss")
 
+    # 5-7. The judge-validation must itself be validated. A worksheet scored by a
+    #      rubber-stamping judge has to come back VOID, or Layer 2 is decoration.
+    pairs = align(_GOOD_EN, _GOOD_KO)
+    worksheet, keyfile = build_worksheet(pairs, seed=1)
+
+    def score_all(fn) -> dict:
+        ws = json.loads(json.dumps(worksheet))     # deep copy
+        for item in ws["items"]:
+            kind = keyfile["key"][item["id"]]["kind"]
+            item["score"] = fn(kind)
+            item["category"] = "complete"
+            item["note"] = "test"
+        return ws
+
+    rubber = score_all(lambda kind: 100)
+    res, _ = ingest_worksheet(rubber, keyfile)
+    check("rubber-stamp judge (all 100s) is rejected", not res["valid"],
+          "a judge scoring unrelated pairs 100 was accepted")
+
+    blind_to_omission = score_all(lambda kind: 20 if kind == "control_mismatch" else 95)
+    res, _ = ingest_worksheet(blind_to_omission, keyfile)
+    check("judge blind to truncation is rejected", not res["valid"],
+          "a judge scoring 60%-truncated text as high as complete text was accepted")
+
+    good = score_all(lambda kind: {"control_mismatch": 5,
+                                   "control_truncated": 40}.get(kind, 95))
+    res, _ = ingest_worksheet(good, keyfile)
+    check("discriminating judge is accepted", res["valid"] and res["adequacy"] is not None,
+          f"a correctly-discriminating judge was rejected: {res}")
+    check("accepted judge reports an adequacy figure",
+          res["adequacy"] is not None and abs(res["adequacy"] - 95.0) < 0.01,
+          f"got {res['adequacy']}")
+
+    incomplete = score_all(lambda kind: 95)
+    incomplete["items"][0]["score"] = None
+    res, _ = ingest_worksheet(incomplete, keyfile)
+    check("unfinished worksheet is rejected", not res["valid"],
+          "a worksheet with an unscored item was accepted")
+
     print()
     if failures:
         print(f"{len(failures)} CONTROL(S) FAILED — this tool's output cannot be trusted:")
@@ -636,6 +931,14 @@ def main() -> None:
     ap.add_argument("--json", type=Path, help="Write machine-readable results here.")
     ap.add_argument("--fail-under", type=float, default=None,
                     help="Exit non-zero if structural integrity is below this percentage.")
+    ap.add_argument("--worksheet-out", type=Path,
+                    help="LAYER 2 step 1: write a blind judging worksheet here. Also "
+                         "writes <path>.key.json — keep that away from the judge.")
+    ap.add_argument("--worksheet-in", type=Path,
+                    help="LAYER 2 step 3: read a filled worksheet and score adequacy. "
+                         "Expects <path>.key.json beside it.")
+    ap.add_argument("--seed", type=int, default=1517,
+                    help="Shuffle seed, so a worksheet is reproducible.")
     args = ap.parse_args()
 
     if args.self_test:
@@ -661,6 +964,36 @@ def main() -> None:
         "alignment_confidence": alignment_confidence(source, target),
         "delivery_rate": delivery_rate(source, target),
     }
+
+    # ── Layer 2 step 1: emit a blind worksheet and stop ───────────────────────
+    if args.worksheet_out:
+        worksheet, keyfile = build_worksheet(pairs, args.seed)
+        args.worksheet_out.parent.mkdir(parents=True, exist_ok=True)
+        args.worksheet_out.write_text(
+            json.dumps(worksheet, ensure_ascii=False, indent=2), encoding="utf-8")
+        key_path = args.worksheet_out.with_suffix(args.worksheet_out.suffix + ".key.json")
+        key_path.write_text(
+            json.dumps(keyfile, ensure_ascii=False, indent=2), encoding="utf-8")
+        n_real = sum(1 for v in keyfile["key"].values() if v["kind"] == "real")
+        n_ctrl = len(keyfile["key"]) - n_real
+        print(f"Worksheet written: {args.worksheet_out}")
+        print(f"  {n_real} real segments + {n_ctrl} hidden controls, shuffled (seed {args.seed})")
+        print(f"Answer key:        {key_path}")
+        print("  DO NOT show the key to the judge. Have the judge fill in score/category/note")
+        print(f"  for every item, then: --worksheet-in {args.worksheet_out}")
+        return
+
+    # ── Layer 2 step 3: ingest a filled worksheet ─────────────────────────────
+    adequacy = None
+    if args.worksheet_in:
+        key_path = args.worksheet_in.with_suffix(args.worksheet_in.suffix + ".key.json")
+        if not key_path.exists():
+            sys.exit(f"ERROR: answer key not found beside the worksheet: {key_path}")
+        worksheet = json.loads(args.worksheet_in.read_text(encoding="utf-8"))
+        keyfile = json.loads(key_path.read_text(encoding="utf-8"))
+        adequacy, judge_findings = ingest_worksheet(worksheet, keyfile)
+        findings += judge_findings
+        meta["adequacy"] = adequacy
 
     report = render_report(meta, pairs, findings, score)
 
