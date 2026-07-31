@@ -768,6 +768,109 @@ everything else untouched.
 """
 
 
+def build_comparison_worksheet(source: list[str], systems: dict[str, list[str]],
+                               seed: int) -> tuple[dict, dict]:
+    """Blind head-to-head worksheet: several systems' output for the same source.
+
+    WHY HEAD-TO-HEAD IN ONE WORKSHEET, rather than scoring each system separately
+    and comparing the two numbers:
+
+    Scoring system A on Monday and system B on Tuesday produces two figures that
+    LOOK comparable and are not. The judge's calibration drifts between sittings —
+    different fatigue, different anchoring, a different sense of what "80" means.
+    You then attribute that drift to the models.
+
+    Interleaving both systems in one shuffled, unlabelled worksheet removes the
+    problem by construction. Every judgment is made in the same sitting against
+    the same internal yardstick, and the judge cannot know which system it is
+    grading, so it cannot favour one. The difference between the resulting scores
+    is then a difference between the systems, which is the only thing we wanted to
+    measure.
+
+    The same negative controls are salted in, and they now do double duty: they
+    validate the judge AND they establish the floor against which both systems are
+    read.
+    """
+    import random
+    rng = random.Random(seed)
+
+    items: list[dict] = []
+    key: dict[str, dict] = {}
+
+    def add(kind: str, system: str | None, src: str, cand: str, idx: int | None) -> None:
+        item_id = f"item_{len(items) + 1:03d}"
+        items.append({"id": item_id, "source": src, "candidate": cand,
+                      "score": None, "category": None, "note": None})
+        key[item_id] = {"kind": kind, "system": system, "source_index": idx}
+
+    for name, outputs in systems.items():
+        for i, (src, cand) in enumerate(zip(source, outputs), 1):
+            if src and cand:
+                add("real", name, src, cand, i)
+
+    # Controls are drawn from the FIRST system's output, but they test the judge,
+    # not the system — so they are attributed to no system and excluded from every
+    # per-system average.
+    first = next(iter(systems.values()))
+    n = max(2, len(source) // 4)
+    if len(source) >= 2:
+        for _ in range(n):
+            a, b = rng.sample(range(min(len(source), len(first))), 2)
+            add("control_mismatch", None, source[a], first[b], None)
+    for _ in range(n):
+        i = rng.randrange(min(len(source), len(first)))
+        cut = max(1, int(len(first[i]) * 0.4))
+        add("control_truncated", None, source[i], first[i][:cut], None)
+
+    rng.shuffle(items)
+    return ({"_instructions": RUBRIC,
+             "_note": ("Items from several systems are interleaved, plus deliberately "
+                       "corrupted controls. You are not told which is which. Score each "
+                       "item on its own merits."),
+             "items": items},
+            {"seed": seed, "key": key})
+
+
+def ingest_comparison(worksheet: dict, keyfile: dict) -> dict:
+    """Per-system adequacy from a head-to-head worksheet, with shared controls."""
+    key = keyfile["key"]
+    scored = {i["id"]: i for i in worksheet.get("items", []) if i.get("score") is not None}
+
+    by_system: dict[str, list[float]] = {}
+    mismatch, truncated = [], []
+    for iid, item in scored.items():
+        meta = key.get(iid, {})
+        s = float(item["score"])
+        if meta.get("kind") == "real":
+            by_system.setdefault(meta["system"], []).append(s)
+        elif meta.get("kind") == "control_mismatch":
+            mismatch.append(s)
+        elif meta.get("kind") == "control_truncated":
+            truncated.append(s)
+
+    all_real = [s for v in by_system.values() for s in v]
+    valid = True
+    reasons = []
+    if len(scored) != len(key):
+        valid = False
+        reasons.append(f"{len(key) - len(scored)} item(s) unscored")
+    if mismatch and max(mismatch) > 30:
+        valid = False
+        reasons.append(f"a mismatched control scored {max(mismatch):.0f} (must be <= 30)")
+    if truncated and all_real:
+        at, ar = sum(truncated) / len(truncated), sum(all_real) / len(all_real)
+        if at >= ar - 15:
+            valid = False
+            reasons.append(f"truncated controls averaged {at:.0f} vs {ar:.0f} for real text")
+
+    return {
+        "valid": valid, "reasons": reasons,
+        "systems": {k: {"adequacy": sum(v) / len(v), "segments": len(v)}
+                    for k, v in sorted(by_system.items())},
+        "controls": {"mismatch": mismatch, "truncated": truncated},
+    }
+
+
 def build_worksheet(pairs: list[Pair], seed: int) -> tuple[dict, dict]:
     """Produce a blind judging worksheet and its private answer key.
 
@@ -1093,6 +1196,11 @@ def main() -> None:
     ap.add_argument("--worksheet-in", type=Path,
                     help="LAYER 2 step 3: read a filled worksheet and score adequacy. "
                          "Expects <path>.key.json beside it.")
+    ap.add_argument("--compare", action="append", metavar="NAME=FILE",
+                    help="Head-to-head mode: add one system's output. Repeat per system, "
+                         "e.g. --compare nllb=a.txt --compare madlad=b.txt. Combine with "
+                         "--worksheet-out to build a blind worksheet, then --worksheet-in "
+                         "to score every system in a single sitting.")
     ap.add_argument("--rebuffer-source", action="store_true",
                     help="Legacy logs only: re-apply server.py's sentence buffering to a "
                          "fragment-level source log, so it matches the sentence-level "
@@ -1103,6 +1211,67 @@ def main() -> None:
 
     if args.self_test:
         sys.exit(self_test())
+
+    # ── Head-to-head comparison mode ──────────────────────────────────────────
+    if args.compare:
+        if not args.source:
+            ap.error("--compare requires --source")
+        src, src_ids = load_segments(args.source)
+        if args.rebuffer_source:
+            src = rebuffer(src)
+
+        systems: dict[str, list[str]] = {}
+        for spec in args.compare:
+            if "=" not in spec:
+                ap.error(f"--compare expects NAME=FILE, got: {spec}")
+            name, path = spec.split("=", 1)
+            texts, _ = load_segments(Path(path))
+            if len(texts) != len(src):
+                ap.error(f"{name}: {len(texts)} segments but source has {len(src)}. "
+                         f"Head-to-head requires every system to translate the same units.")
+            systems[name] = texts
+
+        if args.worksheet_out:
+            ws, kf = build_comparison_worksheet(src, systems, args.seed)
+            args.worksheet_out.parent.mkdir(parents=True, exist_ok=True)
+            args.worksheet_out.write_text(json.dumps(ws, ensure_ascii=False, indent=2),
+                                          encoding="utf-8")
+            kp = args.worksheet_out.with_suffix(args.worksheet_out.suffix + ".key.json")
+            kp.write_text(json.dumps(kf, ensure_ascii=False, indent=2), encoding="utf-8")
+            n_ctrl = sum(1 for v in kf["key"].values() if v["kind"] != "real")
+            print(f"Head-to-head worksheet: {args.worksheet_out}")
+            print(f"  {len(systems)} systems x {len(src)} segments + {n_ctrl} controls, "
+                  f"shuffled and unlabelled (seed {args.seed})")
+            print(f"  Answer key: {kp}  — keep away from the judge.")
+            return
+
+        if args.worksheet_in:
+            kp = args.worksheet_in.with_suffix(args.worksheet_in.suffix + ".key.json")
+            ws = json.loads(args.worksheet_in.read_text(encoding="utf-8"))
+            kf = json.loads(kp.read_text(encoding="utf-8"))
+            res = ingest_comparison(ws, kf)
+            print("\nHead-to-head adequacy\n")
+            if not res["valid"]:
+                print("  VOID — the judge failed calibration:")
+                for r in res["reasons"]:
+                    print(f"    - {r}")
+                print("  No figures reported.")
+                sys.exit(1)
+            width = max(len(k) for k in res["systems"])
+            for name, v in sorted(res["systems"].items(),
+                                  key=lambda kv: -kv[1]["adequacy"]):
+                print(f"  {name.ljust(width)}  {v['adequacy']:6.1f}%   "
+                      f"({v['segments']} segments)")
+            print(f"\n  Controls — mismatch {res['controls']['mismatch']} (must be <=30), "
+                  f"truncated {res['controls']['truncated']}")
+            if args.json:
+                args.json.parent.mkdir(parents=True, exist_ok=True)
+                args.json.write_text(json.dumps(res, ensure_ascii=False, indent=2),
+                                     encoding="utf-8")
+                print(f"  JSON written: {args.json}")
+            return
+
+        ap.error("--compare needs --worksheet-out or --worksheet-in")
 
     if not args.source or not args.target:
         ap.error("--source and --target are required (or use --self-test)")
