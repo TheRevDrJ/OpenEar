@@ -72,6 +72,35 @@ ABBREVIATIONS = {
 }
 
 
+def is_heading(line: str) -> bool:
+    """A short line with no terminal punctuation — a title, section head, or citation.
+
+    WHY THIS EXISTS. On the first real sermon, segment 1 came out as:
+
+        "Hide and Seek Matthew 13:31-33, 44-52 The story My brother and I played
+         a lot of games growing up on our farm in Indiana."
+
+    — the title, the scripture citation, a section heading, and the opening
+    sentence, welded together. None of those lines end in a full stop, so the
+    paragraph-rejoining step (correctly) treated them as wrapped prose and glued
+    them to the sentence that followed.
+
+    That matters beyond tidiness: it would hand BOTH models a garbled first
+    segment and then score them on the mess. A test corpus must never penalise a
+    system for damage the harness introduced.
+
+    Real sentences end in punctuation. Headings, titles and citations do not, and
+    they are short. Both conditions together are a reliable signal; either one
+    alone is not ("He was braver than I was." is short but punctuated, and a long
+    unpunctuated line is more likely a genuine sentence missing its full stop).
+    """
+    if not line:
+        return False
+    if line[-1] in ".!?:;\"'”’)":
+        return False
+    return len(line.split()) <= 8
+
+
 def clean_text(raw: str) -> str:
     """Normalise a manuscript into flowing prose.
 
@@ -84,10 +113,11 @@ def clean_text(raw: str) -> str:
 
     kept: list[str] = []
     for line in text.split("\n"):
-        if SKIP_LINE.match(line):
+        stripped = line.strip()
+        if SKIP_LINE.match(line) or is_heading(stripped):
             kept.append("")            # treat as a paragraph break
             continue
-        kept.append(line.strip())
+        kept.append(stripped)
 
     # Blank line = paragraph break; single newline = a wrap, so rejoin with a space.
     paragraphs, current = [], []
