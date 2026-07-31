@@ -245,3 +245,7 @@ models/
 # pattern above it and the file it was meant to hide gets committed.
 rules_project.md
 STATE.md
+
+# Night-shift handoff letter — the crash-safe "here's where I left things".
+# Project-private, like STATE.md; never public.
+HANDOFF.md
