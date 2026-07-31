@@ -16,6 +16,56 @@ of the work.
 
 ---
 
+## 0.8.0 — "Accuracy Check"
+
+*A percentage that actually means "how much of the sermon got through."*
+
+0.7.0 built the gauge and pointed it at delivery — did every source segment produce
+output of a plausible size? That catches content vanishing, but a fluent mistranslation
+sails through it at 100%. This release measures the thing itself: **did the meaning
+arrive?**
+
+The judge deliberately lives *outside* the tool. The harness emits a blind worksheet, a
+judge fills it in, the harness ingests and scores. That keeps the result auditable (the
+questions and answers are files you can read), keeps the judge swappable (a capable model
+today, a local one later, a native speaker if we ever get one), and keeps whoever built
+the pipeline from being its own unblinded grader.
+
+### Added
+- **Blind judging worksheet** (`--worksheet-out`). Segments shuffled, system identity
+  stripped, hidden calibration controls salted in. A judge scores each pair 0–100 with a
+  category and a one-line note.
+- **Worksheet ingest and scoring** (`--worksheet-in`). Produces an adequacy percentage,
+  a category breakdown, and a per-segment list of everything that scored poorly.
+- **Judge calibration that needs no gold translation.** We cannot manufacture a known-
+  *correct* translation for an arbitrary language, but we can manufacture known-*wrong*
+  ones from the data itself: a source paired with a different segment's translation
+  (must score near zero), and a source paired with the first 40% of its own translation
+  (must score well below the real segments). A judge that fails either is rubber-stamping
+  or blind to omission, and **the run is voided rather than reported** — a number from a
+  broken instrument is worse than no number.
+- Five more self-test controls covering the validation itself: a judge scoring everything
+  100 is rejected, a judge blind to truncation is rejected, a discriminating judge is
+  accepted, and an unfinished worksheet is rejected. Fourteen controls total.
+
+### Notes
+- **First adequacy figure on real data:** the 2026-03-26 Korean service log scores
+  **60.6% adequate**, judge calibration passed.
+- **That figure is not translator accuracy, and the report says so.** Two segments scored
+  `wrong` because the heuristic aligner handed the judge mis-paired source and target;
+  the judge correctly scored a bad *pairing* near zero. Layer 2 inherits Layer 1's
+  uncertainty. Excluding those, the same judgments give roughly 77%.
+- **Defects found that no string metric can see:** `이용하다` for "he's using us" (adequate,
+  but connotes *exploiting* — wrong register for a sermon); 은혜의 의롭다는 것은 garbling the
+  theological term "justifying grace"; 어둠 for "shadow of death", losing the Psalm 23
+  allusion.
+- **The bottleneck is now alignment,** not judging. When segment counts disagree, pairings
+  are guessed by character length, and length cannot see meaning. Fixing that is the next
+  real piece of work — ahead of any further layers.
+- No change to captioning, translation, or the client. Still bench equipment.
+
+---
+
 ## 0.7.0 — "Instrument"
 
 *We can measure translation quality now, instead of having opinions about it.*
