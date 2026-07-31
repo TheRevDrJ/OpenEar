@@ -16,6 +16,55 @@ of the work.
 
 ---
 
+## 0.10.0 — Model comparison at corpus scale, and a registry so we never test one twice
+
+*First full evaluation: NLLB-200 stays. And the real finding isn't the model — Korean
+congregants receive a materially worse sermon than Spanish ones.*
+
+### Added
+- **`build_corpus.py`** — turns sermon manuscripts into a translation test corpus.
+  Rejoins hard-wrapped lines, drops structural scaffolding (titles, citation headers,
+  section heads, stage directions), segments by sentence to match what the translator
+  actually receives, and refuses to write outside a gitignored directory because sermon
+  manuscripts are pastoral material.
+- **Head-to-head comparison** (`--compare NAME=FILE`) — every system's output for the
+  same source in ONE blind, shuffled, unlabelled worksheet. Scoring systems in separate
+  sittings produces figures that look comparable and are not, because judge calibration
+  drifts and that drift gets attributed to the models.
+- **Chunked worksheets and panel merge** (`--chunk-size`, `--merge`) — judging at scale.
+  Every chunk carries its own calibration controls, and a chunk whose judge failed them
+  is **dropped and named** rather than averaged in. One rubber-stamping judge in a panel
+  of twelve would otherwise be invisible.
+- **`MODELS.md`** — the evaluation registry. Every model tried, its licence, its scores,
+  its speed, and the verdict, including the rejects. A measured model is a settled
+  question; this file exists so nobody re-opens it on a hunch a year from now.
+
+### Measured
+192-segment sermon corpus, 24 judges, 960 judgments, **0 chunks rejected**:
+
+| | NLLB-200 3.3B | MADLAD-400 3B |
+|---|---|---|
+| Spanish | 87.3% | 87.4% |
+| Korean | **72.9%** | 70.7% |
+| Speed (ko) | **0.28 s/seg** | 0.73 s/seg |
+
+**No model change.** MADLAD ties in Spanish, loses Korean, and runs 2.6× slower in the
+language that already performs worst.
+
+### Notes
+- **Small corpora don't just add noise — they invert.** An 8-segment pilot had MADLAD
+  *ahead* in Korean (79.1 vs 77.5). At 192 segments that reversed. We would have
+  switched models on a backwards result.
+- **The headline finding is a 14-point gap between languages**, not a 2-point gap
+  between models — and the failure kinds differ. Spanish loses vocabulary; Korean loses
+  *claims*, including several outright inversions where the translation asserts the
+  opposite of the source.
+- **Scripture scored near-perfectly in both languages.** It is the preacher's own prose
+  that degrades.
+- No change to captioning, translation, or the client. Still bench equipment.
+
+---
+
 ## 0.9.0 — Segment IDs make source/translation pairing exact
 
 *Fixes the logging mismatch that forced translation scoring to guess. Adds Spanish
