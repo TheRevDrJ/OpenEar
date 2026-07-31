@@ -130,7 +130,7 @@ That's it. The setup script handles everything else.
 | v0.3 | UI polish, quality presets, admin settings | ✓ Done |
 | v0.4 | Real-time translation — any language, any device | ✓ Done |
 | v0.5 | One-click installer | ✓ Done |
-| v0.6 | Mac Mini M4 development | ◐ In progress... |
+| v0.6 | Mac Mini M4 development **(rejected after cost analysis)** | ✓ Done |
 | v0.7 | Testing at select churches | ◐ In progress... |
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |
