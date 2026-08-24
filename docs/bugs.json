@@ -1,0 +1,52 @@
+{
+  "note": "THE tracker for OpenEar. One file, one source, tracked in git. Read it on the workshop: http://127.0.0.1:8002/workshop/bugs.html — 'Active' / 'Deferred' / 'Closed' are DERIVED from status, never stored.",
+  "ids": "OE = a bug in OpenEar · OF = a feature request · OT = tools, harness and setup, bug or request",
+  "statuses": [
+    "OPEN",
+    "IN PROGRESS",
+    "FIXED",
+    "DEFERRED",
+    "VERIFIED",
+    "DECLINED",
+    "CANNOT REPRODUCE"
+  ],
+  "where": [
+    "SERVER",
+    "CLIENT",
+    "ADMIN",
+    "SETUP",
+    "MODELS",
+    "TOOLS",
+    "WEBSITE"
+  ],
+  "severity": "CRITICAL · HIGH · MEDIUM · LOW · \"\" — and it is THE SHIP GATE. No open CRITICAL or HIGH ships to a congregation.",
+  "verifying": "TWO STEPS, and an entry is VERIFIED only when BOTH are satisfied.\n  verify.dev  — shown working on a local/test run of the server\n  verify.live — shown working on Zora, the real deployment congregations reach\nEach is YES (done) · NO (possible, not done yet) · NA (not required there, or cannot be shown there).\n\nNA AUTO-CLEARS ITS STEP, so nothing strands on a check it can never take — 'dev NA' for anything that needs the CUDA box or real congregational load, 'live NA' for docs, the test harness, the workshop and the website.\n\nBOTH NA means the entry is done the moment the work is.\n\nWHY 'live' AND NOT 'build': OpenEar has no packaged artifact. It runs from source on the machine the church owns, so the real deployment IS the verification target. (FirstLight's second step is 'build' because a game ships as a binary; same rule, different destination.)",
+  "entries": [
+    {
+      "id": "OE-001",
+      "kind": "OE",
+      "num": 1,
+      "title": "starting the server while VMix is running kills VMix, which then cannot see its cameras",
+      "status": "OPEN",
+      "where": "SERVER",
+      "severity": "HIGH",
+      "date": "2026-08-23",
+      "notes": "Reported by Terry Haynes, First Presbyterian Santa Rosa — the first external user, running OpenEar off the public repo. His words: \"If Vmix is run first then we start the OpenEar server, Vmix just disappears. Trying to restart it will not see the cameras anymore. If I start OpenEar first, then Vmix, all is well.\"\nSetup: Dell desktop, VMix capturing 4 NDI cameras plus ProPresenter, streaming to YouTube.\nWORKAROUND (his, confirmed good for now): start OpenEar first, then VMix.\nTHEORY, UNCONFIRMED: GPU contention. At startup the server takes TensorRT then CUDA for Parakeet and ~3.5GB for NLLB (device='cuda' is hardcoded, no CPU fallback). Landing that demand on a GPU VMix already owns would explain both the crash and the ordering asymmetry. NEEDS: his system specs, whether translation is running, and openear.log from a failed start — the log settles it, because it says plainly whether CUDA loaded at all.",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
+      "id": "OE-002",
+      "kind": "OE",
+      "num": 2,
+      "title": "5-7 second delay between speech and caption — asked whether that is expected",
+      "status": "DECLINED",
+      "where": "SERVER",
+      "severity": "",
+      "date": "2026-08-23",
+      "notes": "Terry Haynes: \"We see a 5-7 second delay from when something is spoken to when the transcription happens. Is that what we should expect? We have a pretty busy network...\"\nNOT A DEFECT, and not his network. server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at 10. The recogniser needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation for sentence boundaries.\nMeasured cost of shortening it (test_pipeline.py header): 3s chunks = 14.4% WER against 4.1% at 5s.\nFiled DECLINED rather than left unrecorded because the next person to install this will ask the same question.",
+      "closed": true,
+      "verify": { "dev": "NA", "live": "NA" }
+    }
+  ]
+}

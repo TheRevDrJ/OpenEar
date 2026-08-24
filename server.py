@@ -2,21 +2,38 @@
 # Copyright (c) 2026 TheRevDrJ
 # Licensed under AGPL-3.0 — see LICENSE file for details
 """
-OpenEar v0.5 - Live Speech-to-Text Captioning Server with NLLB Translation
+OpenEar — live captioning and translation server. THE whole application.
 
-Architecture overview:
-  1. A sounddevice InputStream continuously captures raw audio from a chosen input device
-  2. Audio arrives in small blocks (~100ms) via a callback and accumulates in a thread-safe buffer
-  3. Every CHUNK_DURATION seconds, the transcription loop drains the buffer and hands the audio
-     to faster-whisper (Whisper AI running on the GPU) for speech-to-text
-  4. Transcribed text is broadcast to all connected clients over WebSocket
-  5. Clients are display-only — they just show captions. All audio capture happens server-side.
+Version lives in VERSION below and nowhere else.
 
-The admin page (admin.html) controls capture start/stop and device selection via REST API.
-The client page (index.html) connects via WebSocket and renders incoming text.
+⚠ THIS HEADER WAS FALSE UNTIL 2026-08-23 and had been for months: it said
+"v0.5", described faster-whisper running on the GPU, and referenced a
+CHUNK_DURATION constant that does not exist. None of that had been true since
+the Parakeet switch. Rewritten rather than annotated (index.md's standing rule:
+a stacked correction leaves the false line standing, and the next reader takes
+the top sentence).
+
+Architecture:
+  1. A sounddevice InputStream captures audio from a chosen input device.
+  2. Audio arrives in ~100ms blocks via a callback into a thread-safe buffer.
+  3. transcription_loop() cuts on VOICE ACTIVITY, not a fixed interval: it
+     accumulates at least MIN_CHUNK_DURATION (5s), then cuts at the next trailing
+     silence, hard-capping at MAX_CHUNK_DURATION (10s). That floor is why there
+     is a ~5-7s delay between speech and caption, and it is deliberate — the
+     recogniser needs a complete phrase to be accurate and to punctuate.
+  4. **NVIDIA Parakeet** (onnx_asr) transcribes. Not Whisper. It is chosen for
+     punctuation consistency, which the translator depends on downstream.
+  5. broadcast() buffers fragments until a sentence ends, then translates that
+     whole sentence per connected client with **NLLB-200 3.3B** (CTranslate2,
+     int8, CUDA) and pushes it over WebSocket. Both sides of the text log are
+     stamped with a shared segment id so quality scoring pairs them exactly.
+  6. Clients are display-only. All capture happens server-side.
+
+  admin.html  — capture start/stop, device selection, languages (REST).
+  index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 import os
 import sys

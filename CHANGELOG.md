@@ -16,6 +16,43 @@ of the work.
 
 ---
 
+## 0.11.0 — A bug tracker and a workshop, because OpenEar has users now
+
+*A stranger installed this off the public repo and put it in a Sunday service. That
+changes what the project owes.*
+
+Terry Haynes at First Presbyterian Santa Rosa found OpenEar, stood it up himself on a
+Dell running VMix with four NDI cameras, and emailed a defect report. First external
+user, first bug report, and the first time the ship gate has had anything real to
+guard.
+
+### Added
+- **`docs/bugs.json`** — the tracker. One file, tracked in git, carrying its own
+  legend so anyone with only the repo can read its vocabulary. Series are `OE` (bug),
+  `OF` (feature request), `OT` (tools, harness and setup). Sections are DERIVED from
+  status, never stored.
+- **`workshop/serve.py`** — a read-only tool-bench on **port 8002**. Pure standard
+  library: no venv, no npm, nothing to install, so it runs on the Mac where the
+  reading happens as happily as on the CUDA box.
+- **`workshop/bugs.html`** — the bench. Ship gate at the top, then Active / Deferred /
+  Closed, filterable and searchable.
+
+### Notes
+- **Read-only is a property of the code, not a flag.** There is no write route on that
+  server to disable, so every write verb answers 501. Bugs are filed by hand because
+  triage is a judgment, and a judgment does not go in a form.
+- **Verification here is `dev` and `live`, not `dev` and `build`.** OpenEar has no
+  packaged artifact — it runs from source on hardware the church owns, so the real
+  deployment *is* the second verification target.
+- **The ship gate currently reads red.** OE-001 is open at HIGH: starting the server
+  while VMix is running takes VMix down, and it cannot see its cameras afterward.
+  Workaround confirmed (start OpenEar first); cause unconfirmed pending logs.
+- **`server.py`'s header was false and is rewritten.** It claimed v0.5, described
+  faster-whisper on the GPU, and named a constant that does not exist — none of it
+  true since the Parakeet switch.
+
+---
+
 ## 0.10.0 — Model comparison at corpus scale, and a registry so we never test one twice
 
 *First full evaluation: NLLB-200 stays. And the real finding isn't the model — Korean
