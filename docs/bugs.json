@@ -24,10 +24,11 @@
     "ADMIN",
     "SETUP",
     "MODELS",
+    "DOCS",
     "WEBSITE"
   ],
 
-  "whereNote": "One value, and the test is mechanical: what does a FIX touch? Not how bad it is — that is 'blocking'. Entries of kind TOOL carry no 'where' at all; the kind already says it.",
+  "whereNote": "One value, and the test is mechanical: what does a FIX touch? Not how bad it is — that is 'blocking'. Entries of kind TOOL carry no 'where' at all; the kind already says it.\n\nDOCS added 2026-08-23, on Jonathan's ask: \"I think we need some kind of documentation flag for bug reports or something. I guess if the readmes are wrong they *are* bugs, but we need a way to indicate it's a doc problem, not a code problem.\" It is 'where' and not a new kind, because 'where' already asks exactly that question — what does a FIX touch — and the answer for a wrong README is the README. So a false statement in a doc stays a BUG (a claim about the product, settled by fact) and DOCS says the repair is prose, not code. Covers README.md, SETUP.txt, DEMO.md, and comments inside source: a comment that describes behaviour the code does not have is a doc defect living in a .py file.",
 
   "blocking": "\"blocking\": true is THE SHIP GATE, and absent means false. Nothing blocking may sit OPEN / IN PROGRESS / FIXED when we ship to a congregation. It replaced a CRITICAL/HIGH/MEDIUM/LOW severity scale because a boolean has no spelling — the old gate matched case-sensitively and an entry written 'high' could not satisfy it at all. Kind TOOL is excluded from the gate: a broken bench cannot make the server unfit to serve a service.",
 
@@ -54,9 +55,45 @@
       "num": 1,
       "title": "README should mention the initial caption delay and why it exists",
       "status": "OPEN",
-      "where": "SETUP",
+      "where": "DOCS",
       "date": "2026-08-23",
-      "notes": "Jonathan, filing it: \"FEATURE - update readme to mention the intiial delay and reason.\"\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nFiled under SETUP because that is what a new installer reads. The fix touches SETUP.txt and the README both.",
+      "notes": "Jonathan, filing it: \"FEATURE - update readme to mention the intiial delay and reason.\"\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nThe fix touches SETUP.txt and the README both.",
+      "closed": false,
+      "verify": { "dev": "NA", "live": "NA" }
+    },
+    {
+      "id": "BUG-002",
+      "kind": "BUG",
+      "num": 2,
+      "title": "README says the Mac Mini is 'in testing' and the goal, three lines from saying it was rejected",
+      "status": "OPEN",
+      "where": "DOCS",
+      "date": "2026-08-23",
+      "notes": "The public README states the Mac Mini's status three ways: line 74 \"Mac Mini M4 (in testing)\", line 101 \"the goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality\", line 133 \"Mac Mini M4 development (rejected after cost analysis) — Done\". Only the roadmap row was swept; the two prose lines survived, and a reader takes the top one.\nWHAT IT SHOULD SAY (Jonathan's basis, 2026-08-23): OpenEar does not officially support macOS today. Transcription runs on it; translation does not. Mac support is deferred until there is enough demand, and in the meantime anyone can fork it — transcription will run, but they will need macOS equivalents of the Windows batch files.\n⛔ VERIFY THE REASON BEFORE IT GOES IN A PUBLIC README. Three of our own docs disagree about whether Parakeet needs CUDA — see BUG-003. Do not publish a hardware claim we have not measured.",
+      "closed": false,
+      "verify": { "dev": "NA", "live": "NA" }
+    },
+    {
+      "id": "BUG-003",
+      "kind": "BUG",
+      "num": 3,
+      "title": "our own docs disagree about whether Parakeet needs CUDA or runs on CPU",
+      "status": "OPEN",
+      "where": "DOCS",
+      "date": "2026-08-23",
+      "notes": "rules_project.md section 2 says \"NLLB-3.3B via CTranslate2 and Parakeet via onnxruntime-gpu BOTH demand CUDA; the M5 Max cannot provide it at any RAM size.\"\nserver.py's own comment above the load call says \"Load the Parakeet ASR model at startup. Runs on CPU — fast enough for real-time transcription and frees up GPU VRAM entirely for the translation model.\"\nREADME's reference-server table says \"ASR model | Parakeet-TDT-0.6B (CPU)\".\nTwo say CPU, one says CUDA, and NOT ONE OF THEM IS A MEASUREMENT. onnx_asr.load_model() is called with no provider argument, so onnxruntime picks the first available provider — which on Zora is TensorRT or CUDA, meaning the \"runs on CPU\" comments may describe an intent nobody has checked since.\nTHIS BLOCKS BUG-002: whether a Mac can do transcription is exactly the question these three docs disagree about. Settle it by reading the session's actual provider at runtime, not by picking whichever doc sounds most confident.",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
+      "id": "BUG-004",
+      "kind": "BUG",
+      "num": 4,
+      "title": "server.py carries three comments naming Whisper, which is not in this stack",
+      "status": "OPEN",
+      "where": "DOCS",
+      "date": "2026-08-23",
+      "notes": "Left over from the pre-Parakeet era: the CUDA DLL block explains itself as \"so that faster-whisper can load the GPU acceleration libraries\", a section banner reads \"FASTAPI APP & WHISPER MODEL\", and SAMPLE_RATE is commented \"16kHz — what Whisper expects\".\nThere is no Whisper here. The stack is onnx-asr (Parakeet) + ctranslate2 (NLLB) + onnxruntime-gpu, and rules_project.md says plainly \"There is no PyTorch here... Don't reach for torch to test the GPU.\"\nSame family as the file's docstring, which claimed v0.5 and faster-whisper until it was rewritten 2026-08-23 — these three survived that pass because the pass fixed the header and not the body.\nComments only; no behaviour changes and no version bump.",
       "closed": false,
       "verify": { "dev": "NA", "live": "NA" }
     }

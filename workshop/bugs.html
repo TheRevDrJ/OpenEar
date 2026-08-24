@@ -170,8 +170,12 @@ function render() {
   section('Closed',   all.filter(e => !ACTIVE.includes(e.status) && !DEFERRED.includes(e.status)));
 }
 
+// ⭐ Idempotent on purpose: it is only called once today, so a second call would
+//    silently DOUBLE both dropdowns rather than fail. Correct in itself beats
+//    correct because of who calls it.
 function fillSelects() {
   const w = document.getElementById('where'), k = document.getElementById('kind');
+  [w, k].forEach(s => { while (s.options.length > 1) s.remove(1); });  // keep the "all" row
   (DATA.where || []).forEach(v => w.append(el('option', null, v)));
   [...new Set((DATA.entries || []).map(e => e.kind))].sort()
     .forEach(v => k.append(el('option', null, v)));
