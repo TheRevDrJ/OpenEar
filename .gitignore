@@ -246,6 +246,6 @@ models/
 rules_project.md
 STATE.md
 
-# Night-shift handoff letter — the crash-safe "here's where I left things".
-# Project-private, like STATE.md; never public.
-HANDOFF.md
+# The walkable list of what OpenEar must always be true about.
+# Jonathan's items; private like the two above until he says otherwise.
+core_principles.md

@@ -1,51 +1,63 @@
 {
-  "note": "THE tracker for OpenEar. One file, one source, tracked in git. Read it on the workshop: http://127.0.0.1:8002/workshop/bugs.html — 'Active' / 'Deferred' / 'Closed' are DERIVED from status, never stored.",
-  "ids": "OE = a bug in OpenEar · OF = a feature request · OT = tools, harness and setup, bug or request",
+  "note": "THE tracker for OpenEar. One file, one source, tracked in git. Read it on the workshop: python3 workshop/serve.py, then http://127.0.0.1:8002/bugs.html — 'Active' / 'Deferred' / 'Closed' are DERIVED from status, never stored.",
+
+  "ids": "BUG = the shipped product misbehaves (a claim about the code, settled by fact) · FEATURE = something someone wants, including Jonathan (a claim about taste, settled by his call) · TOOL = anything using an internal tool rather than the shipped product — bug or request, one series. The prefix names the TYPE, never the project: a bug here and a bug in any other project are both BUG-NNN, because one tracker file per project means the project is already implied.",
+
   "statuses": [
     "OPEN",
     "IN PROGRESS",
     "FIXED",
     "DEFERRED",
     "VERIFIED",
-    "DECLINED",
-    "CANNOT REPRODUCE"
+    "BY DESIGN",
+    "UPSTREAM",
+    "NOT REPRODUCIBLE",
+    "DUPLICATE",
+    "DECLINED"
   ],
+
+  "resolutions": "The lifecycle is shared; the resolutions split by KIND. OPEN / IN PROGRESS / FIXED / VERIFIED apply to everything. A BUG may close BY DESIGN, UPSTREAM, NOT REPRODUCIBLE or DUPLICATE — never DECLINED, because declining is taste and a bug is fact. A FEATURE or TOOL may close DECLINED or DUPLICATE, or park as DEFERRED. DUPLICATE requires 'dupeOf'. DEFERRED requires a trigger in the notes — a condition someone else will meet, never a date and never an intention.",
+
   "where": [
     "SERVER",
     "CLIENT",
     "ADMIN",
     "SETUP",
     "MODELS",
-    "TOOLS",
     "WEBSITE"
   ],
-  "severity": "CRITICAL · HIGH · MEDIUM · LOW · \"\" — and it is THE SHIP GATE. No open CRITICAL or HIGH ships to a congregation.",
-  "verifying": "TWO STEPS, and an entry is VERIFIED only when BOTH are satisfied.\n  verify.dev  — shown working on a local/test run of the server\n  verify.live — shown working on Zora, the real deployment congregations reach\nEach is YES (done) · NO (possible, not done yet) · NA (not required there, or cannot be shown there).\n\nNA AUTO-CLEARS ITS STEP, so nothing strands on a check it can never take — 'dev NA' for anything that needs the CUDA box or real congregational load, 'live NA' for docs, the test harness, the workshop and the website.\n\nBOTH NA means the entry is done the moment the work is.\n\nWHY 'live' AND NOT 'build': OpenEar has no packaged artifact. It runs from source on the machine the church owns, so the real deployment IS the verification target. (FirstLight's second step is 'build' because a game ships as a binary; same rule, different destination.)",
+
+  "whereNote": "One value, and the test is mechanical: what does a FIX touch? Not how bad it is — that is 'blocking'. Entries of kind TOOL carry no 'where' at all; the kind already says it.",
+
+  "blocking": "\"blocking\": true is THE SHIP GATE, and absent means false. Nothing blocking may sit OPEN / IN PROGRESS / FIXED when we ship to a congregation. It replaced a CRITICAL/HIGH/MEDIUM/LOW severity scale because a boolean has no spelling — the old gate matched case-sensitively and an entry written 'high' could not satisfy it at all. Kind TOOL is excluded from the gate: a broken bench cannot make the server unfit to serve a service.",
+
+  "verifying": "TWO STEPS, and an entry is VERIFIED only when BOTH are satisfied.\n  verify.dev  — shown working on a local/test run of the server\n  verify.live — shown working on Zora, the real deployment congregations reach\nEach is YES (done) · NO (possible, not done yet) · NA (not required there, or cannot be shown there).\n\nNA AUTO-CLEARS ITS STEP, so nothing strands on a check it can never take — 'dev NA' for anything that needs the CUDA box or real congregational load, 'live NA' for docs, the test harness, the workshop and the website.\n\nBOTH NA means the entry is done the moment the work is.\n\nWHY 'live' AND NOT 'build': OpenEar has no packaged artifact. It runs from source on the machine the church owns, so the real deployment IS the verification target. (FirstLight's second step is 'build' because a game ships as a binary; same rule, honest destination.)",
+
   "entries": [
     {
-      "id": "OE-001",
-      "kind": "OE",
+      "id": "BUG-001",
+      "kind": "BUG",
       "num": 1,
       "title": "starting the server while VMix is running kills VMix, which then cannot see its cameras",
       "status": "OPEN",
       "where": "SERVER",
-      "severity": "HIGH",
+      "blocking": true,
       "date": "2026-08-23",
       "notes": "Reported by Terry Haynes, First Presbyterian Santa Rosa — the first external user, running OpenEar off the public repo. His words: \"If Vmix is run first then we start the OpenEar server, Vmix just disappears. Trying to restart it will not see the cameras anymore. If I start OpenEar first, then Vmix, all is well.\"\nSetup: Dell desktop, VMix capturing 4 NDI cameras plus ProPresenter, streaming to YouTube.\nWORKAROUND (his, confirmed good for now): start OpenEar first, then VMix.\nTHEORY, UNCONFIRMED: GPU contention. At startup the server takes TensorRT then CUDA for Parakeet and ~3.5GB for NLLB (device='cuda' is hardcoded, no CPU fallback). Landing that demand on a GPU VMix already owns would explain both the crash and the ordering asymmetry. NEEDS: his system specs, whether translation is running, and openear.log from a failed start — the log settles it, because it says plainly whether CUDA loaded at all.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "verify": { "dev": "NO", "live": "NO" },
+      "was": ["OE-001"]
     },
     {
-      "id": "OE-002",
-      "kind": "OE",
-      "num": 2,
-      "title": "5-7 second delay between speech and caption — asked whether that is expected",
-      "status": "DECLINED",
-      "where": "SERVER",
-      "severity": "",
+      "id": "FEATURE-001",
+      "kind": "FEATURE",
+      "num": 1,
+      "title": "README should mention the initial caption delay and why it exists",
+      "status": "OPEN",
+      "where": "SETUP",
       "date": "2026-08-23",
-      "notes": "Terry Haynes: \"We see a 5-7 second delay from when something is spoken to when the transcription happens. Is that what we should expect? We have a pretty busy network...\"\nNOT A DEFECT, and not his network. server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at 10. The recogniser needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation for sentence boundaries.\nMeasured cost of shortening it (test_pipeline.py header): 3s chunks = 14.4% WER against 4.1% at 5s.\nFiled DECLINED rather than left unrecorded because the next person to install this will ask the same question.",
-      "closed": true,
+      "notes": "Jonathan, filing it: \"FEATURE - update readme to mention the intiial delay and reason.\"\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nFiled under SETUP because that is what a new installer reads. The fix touches SETUP.txt and the README both.",
+      "closed": false,
       "verify": { "dev": "NA", "live": "NA" }
     }
   ]

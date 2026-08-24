@@ -33,7 +33,7 @@ Architecture:
   index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.11.0"
+VERSION = "0.11.1"
 
 import os
 import sys

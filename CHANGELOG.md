@@ -16,6 +16,28 @@ of the work.
 
 ---
 
+## 0.11.1 — Tracker ids name the type, not the project, and the ship gate is a boolean
+
+The tracker shipped yesterday used a project prefix and a four-value severity scale.
+Both were superseded the same week, so this brings OpenEar in line before the habit set.
+
+- **`OE` / `OF` / `OT` → `BUG` / `FEATURE` / `TOOL`.** The prefix carries the *type*.
+  One tracker file per project already implies the project, so a project prefix is the
+  Jira convention solving a problem we do not have. **The 0.11.0 entry below cites
+  `OE-001`; that is now `BUG-001`, and the entry carries `was: ["OE-001"]` so the old
+  id still resolves in the bench's search.** Released history is not rewritten.
+- **Severity replaced by one `blocking` boolean**, which *is* the ship gate. A boolean
+  has no spelling — the previous scale could be written `high` and silently fail to
+  satisfy a gate matching `HIGH`.
+- **The gate excludes `kind: TOOL`** and reads the whole tracker rather than the
+  filtered view. Both directions are negative-tested: it goes green when the blocker
+  closes, and a blocking `TOOL` entry cannot turn it red.
+- **`where` lost its `TOOLS` value** — `kind: TOOL` already said it, and one fact
+  stored twice is two facts that can disagree.
+- **The status set is closed and now splits resolutions by kind.** A bug can close
+  `BY DESIGN`, `UPSTREAM`, `NOT REPRODUCIBLE` or `DUPLICATE`, never `DECLINED` —
+  declining is taste, and a bug is fact.
+
 ## 0.11.0 — A bug tracker and a workshop, because OpenEar has users now
 
 *A stranger installed this off the public repo and put it in a Sunday service. That

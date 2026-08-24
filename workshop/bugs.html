@@ -54,8 +54,7 @@
   .title { font-weight:600; flex:1; min-width:200px }
   .tag { font-size:11px; letter-spacing:1px; padding:2px 7px; border-radius:4px;
          border:1px solid var(--line); color:var(--dim); white-space:nowrap }
-  .sev-CRITICAL,.sev-HIGH { color:var(--red); border-color:#5a2029 }
-  .sev-MEDIUM { color:var(--amber); border-color:#5a4520 }
+  .blocking { color:var(--red); border-color:#5a2029; font-weight:700 }
   .notes { white-space:pre-wrap; color:var(--dim); margin-top:8px; font-size:13px;
            border-top:1px dashed var(--line); padding-top:8px }
   .verify { font-size:11px; color:var(--dim); margin-top:6px; letter-spacing:.5px }
@@ -100,16 +99,21 @@ const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.num ||
 function card(e) {
   const c = el('div', 'card');
   c.style.borderLeftColor =
-    e.severity === 'CRITICAL' || e.severity === 'HIGH' ? 'var(--red)'
-    : e.severity === 'MEDIUM' ? 'var(--amber)'
+    e.blocking ? 'var(--red)'
     : e.status === 'OPEN' || e.status === 'IN PROGRESS' ? 'var(--blue)'
     : 'var(--line)';
 
   const r = el('div', 'row1');
   r.append(el('span', 'id', e.id), el('span', 'title', e.title));
-  if (e.severity) r.append(el('span', 'tag sev-' + e.severity, e.severity));
-  r.append(el('span', 'tag', e.status), el('span', 'tag', e.where), el('span', 'tag', e.date));
-  if (e.was) r.append(el('span', 'tag', 'was ' + e.was));
+  if (e.blocking) r.append(el('span', 'tag blocking', 'BLOCKING'));
+  r.append(el('span', 'tag', e.status));
+  // ⛔ Entries of kind TOOL carry no `where` — the kind already says it. Guard,
+  //    or the row grows an empty chip that looks like a missing value.
+  if (e.where) r.append(el('span', 'tag', e.where));
+  r.append(el('span', 'tag', e.date));
+  if (e.dupeOf) r.append(el('span', 'tag', 'dupe of ' + e.dupeOf));
+  // `was` is a string for one rename, a list when an entry has moved twice.
+  if (e.was) r.append(el('span', 'tag', 'was ' + [].concat(e.was).join(', ')));
   c.append(r);
 
   if (e.notes) c.append(el('div', 'notes', e.notes));
@@ -136,22 +140,30 @@ function render() {
   const w = document.getElementById('where').value;
   const k = document.getElementById('kind').value;
 
+  // ⭐ `was` is searched on purpose: an old id cited in a commit message, a
+  //    changelog or a code comment must still find its entry after a rename.
   const match = e =>
     (!w || e.where === w) && (!k || e.kind === k) &&
-    (!q || [e.id, e.title, e.notes, e.status, e.where].join(' ').toLowerCase().includes(q));
+    (!q || [e.id, e.title, e.notes, e.status, e.where, [].concat(e.was || []).join(' ')]
+             .join(' ').toLowerCase().includes(q));
 
   const all = (DATA.entries || []).filter(match);
 
-  // ⭐ THE SHIP GATE — severity, over ACTIVE entries only, and it is the top line
-  //    of the page because it is the question the tracker exists to answer.
+  // ⭐ THE SHIP GATE — `blocking`, over ACTIVE entries only, and it is the top
+  //    line of the page because it is the question the tracker exists to answer.
+  //    ⛔ It reads the WHOLE tracker, never the filtered list: a gate that
+  //    answers differently depending on a dropdown is not a gate.
+  //    ⛔ kind TOOL is excluded — a broken bench cannot make the server unfit to
+  //    serve a service, and a banner that reads BLOCKED over a bench is a banner
+  //    he learns to ignore.
   const blockers = (DATA.entries || []).filter(
-    e => ACTIVE.includes(e.status) && (e.severity === 'CRITICAL' || e.severity === 'HIGH'));
+    e => ACTIVE.includes(e.status) && e.blocking === true && e.kind !== 'TOOL');
   const gate = document.getElementById('gate');
   gate.className = blockers.length ? 'gate-bad' : 'gate-ok';
   gate.textContent = blockers.length
-    ? '⛔  ' + blockers.length + ' open CRITICAL/HIGH — ' +
+    ? '⛔  ' + blockers.length + ' blocking — ' +
       blockers.map(b => b.id).join(', ') + '. Not shippable to a congregation.'
-    : '✅  No open CRITICAL or HIGH. Ship gate is clear.';
+    : '✅  Nothing blocking. Ship gate is clear.';
 
   section('Active',   all.filter(e => ACTIVE.includes(e.status)));
   section('Deferred', all.filter(e => DEFERRED.includes(e.status)));
