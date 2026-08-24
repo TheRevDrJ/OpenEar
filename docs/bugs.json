@@ -16,6 +16,8 @@
     "DECLINED"
   ],
 
+  "docsTest": "MISSING vs WRONG, and it decides the kind (his ruling, 2026-08-23): \"If something is missing from the readme or another doc it's a feature. If something is wrong in the docs, it's a bug.\" A doc that fails to say a true thing is a gap someone wants filled — taste, his call, FEATURE. A doc that says a false thing is a claim about the product that does not hold — fact, checkable by anyone, BUG. Either way 'where' is DOCS. He named it after filing FEATURE-001 as a feature and then learning SETUP.txt was actively backwards rather than merely silent: \"when I told you feature, I didn't know we made a claim in the readme that was incorrect, so I thought it was a feature. If we claim something wrong, then it's a bug.\"",
+
   "resolutions": "The lifecycle is shared; the resolutions split by KIND. OPEN / IN PROGRESS / FIXED / VERIFIED apply to everything. A BUG may close BY DESIGN, UPSTREAM, NOT REPRODUCIBLE or DUPLICATE — never DECLINED, because declining is taste and a bug is fact. A FEATURE or TOOL may close DECLINED or DUPLICATE, or park as DEFERRED. DUPLICATE requires 'dupeOf'. DEFERRED requires a trigger in the notes — a condition someone else will meet, never a date and never an intention.",
 
   "where": [
@@ -44,20 +46,21 @@
       "where": "SERVER",
       "blocking": true,
       "date": "2026-08-23",
-      "notes": "Reported by Terry Haynes, First Presbyterian Santa Rosa — the first external user, running OpenEar off the public repo. His words: \"If Vmix is run first then we start the OpenEar server, Vmix just disappears. Trying to restart it will not see the cameras anymore. If I start OpenEar first, then Vmix, all is well.\"\nSetup: Dell desktop, VMix capturing 4 NDI cameras plus ProPresenter, streaming to YouTube.\nWORKAROUND (his, confirmed good for now): start OpenEar first, then VMix.\nTHEORY, UNCONFIRMED: GPU contention. At startup the server takes TensorRT then CUDA for Parakeet and ~3.5GB for NLLB (device='cuda' is hardcoded, no CPU fallback). Landing that demand on a GPU VMix already owns would explain both the crash and the ordering asymmetry. NEEDS: his system specs, whether translation is running, and openear.log from a failed start — the log settles it, because it says plainly whether CUDA loaded at all.",
+      "notes": "Reported by Terry Haynes, First Presbyterian Santa Rosa — the first external user, running OpenEar off the public repo. His words: \"If Vmix is run first then we start the OpenEar server, Vmix just disappears. Trying to restart it will not see the cameras anymore. If I start OpenEar first, then Vmix, all is well.\"\nSetup: Dell desktop, VMix capturing 4 NDI cameras plus ProPresenter, streaming to YouTube.\nWORKAROUND (his, confirmed good for now): start OpenEar first, then VMix.\nTHEORY, UNCONFIRMED: GPU contention. At startup the server takes TensorRT then CUDA for Parakeet and ~3.5GB for NLLB (device='cuda' is hardcoded, no CPU fallback). Landing that demand on a GPU VMix already owns would explain both the crash and the ordering asymmetry. NEEDS: his system specs, whether translation is running, and openear.log from a failed start — the log settles it, because it says plainly whether CUDA loaded at all.\nONE MORE THING TO CHECK, from BUG-003: onnx_asr.load_model() passes NO provider, so onnxruntime takes the first available — TensorRT or CUDA on a machine that has them. If ASR is quietly on the GPU too, the startup demand is larger than the ~3.5GB translation figure suggests, and that matters here even though Parakeet does not REQUIRE a GPU. If it holds up, an explicit CPU provider for ASR may be the fix, and it costs nothing on a box with no card.",
       "closed": false,
       "verify": { "dev": "NO", "live": "NO" },
       "was": ["OE-001"]
     },
     {
-      "id": "FEATURE-001",
-      "kind": "FEATURE",
-      "num": 1,
-      "title": "README should mention the initial caption delay and why it exists",
+      "id": "BUG-005",
+      "kind": "BUG",
+      "num": 5,
+      "title": "SETUP.txt has the caption latency backwards — says English has zero added delay",
       "status": "OPEN",
       "where": "DOCS",
       "date": "2026-08-23",
-      "notes": "Jonathan, filing it: \"FEATURE - update readme to mention the intiial delay and reason.\"\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nThe fix touches SETUP.txt and the README both.",
+      "was": ["FEATURE-001"],
+      "notes": "FILED AS A FEATURE, RE-KINDED THE SAME DAY. Jonathan's original ask was \"FEATURE - update readme to mention the intiial delay and reason\" — filed before either of us knew SETUP.txt made a claim that was wrong rather than absent. His ruling on learning it: \"when I told you feature, I didn't know we made a claim in the readme that was incorrect, so I thought it was a feature. If we claim something wrong, then it's a bug.\" See docsTest above.\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nThe fix touches SETUP.txt and the README both.",
       "closed": false,
       "verify": { "dev": "NA", "live": "NA" }
     },
@@ -65,11 +68,11 @@
       "id": "BUG-002",
       "kind": "BUG",
       "num": 2,
-      "title": "README says the Mac Mini is 'in testing' and the goal, three lines from saying it was rejected",
+      "title": "README still calls the Mac Mini 'in testing' and 'actively being tested' after it was rejected",
       "status": "OPEN",
       "where": "DOCS",
       "date": "2026-08-23",
-      "notes": "The public README states the Mac Mini's status three ways: line 74 \"Mac Mini M4 (in testing)\", line 101 \"the goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality\", line 133 \"Mac Mini M4 development (rejected after cost analysis) — Done\". Only the roadmap row was swept; the two prose lines survived, and a reader takes the top one.\nWHAT IT SHOULD SAY (Jonathan's basis, 2026-08-23): OpenEar does not officially support macOS today. Transcription runs on it; translation does not. Mac support is deferred until there is enough demand, and in the meantime anyone can fork it — transcription will run, but they will need macOS equivalents of the Windows batch files.\n⛔ VERIFY THE REASON BEFORE IT GOES IN A PUBLIC README. Three of our own docs disagree about whether Parakeet needs CUDA — see BUG-003. Do not publish a hardware claim we have not measured.",
+      "notes": "SCOPED DOWN BY JONATHAN AFTER READING IT HIMSELF, 2026-08-23: \"It says transcription runs on cpu via parakeet, translation limited without nvidia gpu. That's pretty true. But we could change it to 'not currently supported'. I don't want to get into it now anyway. We have the bug database for this.\"\nSo the CAPABILITY lines are fine. What is wrong is the STATUS around them, in three places: line 74 \"Mac Mini M4 (in testing)\", line 77 \"Status: v0.6 — actively being tested\", and line 101 \"the goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality\". Line 133's roadmap row already says \"rejected after cost analysis — Done\". Only that row was swept; the prose around it survived, and a reader takes the top one.\nWHAT IT SHOULD SAY (Jonathan's basis, 2026-08-23): OpenEar does not officially support macOS today. Transcription runs on it; translation does not. Mac support is deferred until there is enough demand, and in the meantime anyone can fork it — transcription will run, but they will need macOS equivalents of the Windows batch files.\nTHE TRANSCRIPTION HALF IS SETTLED (BUG-003): Parakeet runs on CPU, so it has no GPU requirement to port.\n⚠ THE TRANSLATION HALF IS NOT MEASURED. \"Cannot\" is the honest word for our stack today — NLLB runs through CTranslate2 with device='cuda' hardcoded and no CPU fallback — but nobody has tried NLLB on Apple Silicon CPU, so we do not know whether it is impossible or merely too slow to use in a service. Say what we support, not what the hardware can never do.",
       "closed": false,
       "verify": { "dev": "NA", "live": "NA" }
     },
@@ -77,13 +80,13 @@
       "id": "BUG-003",
       "kind": "BUG",
       "num": 3,
-      "title": "our own docs disagree about whether Parakeet needs CUDA or runs on CPU",
-      "status": "OPEN",
+      "title": "rules_project.md claimed Parakeet needs CUDA; it runs on CPU",
+      "status": "VERIFIED",
       "where": "DOCS",
       "date": "2026-08-23",
-      "notes": "rules_project.md section 2 says \"NLLB-3.3B via CTranslate2 and Parakeet via onnxruntime-gpu BOTH demand CUDA; the M5 Max cannot provide it at any RAM size.\"\nserver.py's own comment above the load call says \"Load the Parakeet ASR model at startup. Runs on CPU — fast enough for real-time transcription and frees up GPU VRAM entirely for the translation model.\"\nREADME's reference-server table says \"ASR model | Parakeet-TDT-0.6B (CPU)\".\nTwo say CPU, one says CUDA, and NOT ONE OF THEM IS A MEASUREMENT. onnx_asr.load_model() is called with no provider argument, so onnxruntime picks the first available provider — which on Zora is TensorRT or CUDA, meaning the \"runs on CPU\" comments may describe an intent nobody has checked since.\nTHIS BLOCKS BUG-002: whether a Mac can do transcription is exactly the question these three docs disagree about. Settle it by reading the session's actual provider at runtime, not by picking whichever doc sounds most confident.",
-      "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "notes": "rules_project.md section 2 said \"NLLB-3.3B via CTranslate2 and Parakeet via onnxruntime-gpu BOTH demand CUDA\" — while server.py's own comment above the load call says ASR \"Runs on CPU\" and the README's reference-server table says \"ASR model | Parakeet-TDT-0.6B (CPU)\". Two against one, and none of the three was a measurement, so Bob raised it as unsettled.\nSETTLED BY JONATHAN, and the reasoning needs no instrument: \"Parakeet is the transcription model right? It runs on cpu on Windows, and can run on mac. If it runs on cpu on windows, it clearly doesn't need a gpu.\" CPU is CPU. A model that transcribes in real time off a Ryzen has no GPU requirement to port.\nFIX: rules_project.md section 2 now says translation is what needs CUDA, and that a Mac can caption but cannot translate.\nA SEPARATE AND SMALLER QUESTION SURVIVES, moved to BUG-001 where it actually matters: load_model() passes no provider, so on Zora onnxruntime may hand ASR to TensorRT/CUDA anyway. That does not change what the model REQUIRES; it changes what Zora happens to do, which is relevant to the VMix contention theory and nothing else.",
+      "closed": true,
+      "verify": { "dev": "NA", "live": "NA" }
     },
     {
       "id": "BUG-004",
