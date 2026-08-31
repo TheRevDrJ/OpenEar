@@ -65,6 +65,19 @@
       "verify": { "dev": "NA", "live": "NA" }
     },
     {
+      "id": "BUG-007",
+      "kind": "BUG",
+      "num": 7,
+      "title": "an unfinished sentence strands in the buffer across hymns, prayers and every other service transition",
+      "status": "OPEN",
+      "where": "SERVER",
+      "blocking": true,
+      "date": "2026-08-31",
+      "notes": "_translation_buffer is cleared in exactly two places: when a sentence completes (server.py ~477) and when capture STOPS (~707). Nowhere else. There is no flush on silence, no timeout, no per-segment boundary.\nSO: a chunk cut at MAX_CHUNK_DURATION is cut mid-speech and almost never ends in terminal punctuation, and its text sits in the buffer until some LATER chunk supplies a '.', '!' or '?'. Terry's log says 39.2% of real chunks hit that cap. If a capped chunk holds the last words before a hymn, that fragment is stranded through the whole hymn and is then glued onto the first sentence of whatever follows.\n⛔ AND NOTHING IS DISPLAYED WHILE IT WAITS — the entire transcript path in broadcast() sits inside the sentence-completion branch, so English clients get nothing either. A partial-hearing congregant watches a frozen caption while someone is visibly speaking. That is the worst possible failure for the exact people this product exists for (FEATURE-003).\nJonathan found the scope, 2026-08-31: \"'Start every message with a throwaway line' doesn't cover the entire service, only the sermon. I was scoping too small.\" A service is a welcome, announcements, readings, prayers, songs, a sermon, a benediction — every transition between them can strand text.\n⭐ NOT AN ASR QUALITY PROBLEM. transcribe_audio_chunk() hands raw audio straight to asr_model.recognize(); the buffer is downstream of that and operates on already-transcribed text. WER is a function of chunk size alone (3s=14.4%, 5s=4.1%, 10s=3.0%). Nothing here changes how accurate a word is, only when it appears.\n⬜ FIX IS UNDECIDED AND SHOULD WAIT ON RESEARCH: a silence-triggered flush is the obvious patch, but the better answer may be interim-hypothesis-then-revise, which is what production live captioning does. Open question for Felix — does onnx_asr / Parakeet-TDT expose streaming or partial decoding?",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
       "id": "FEATURE-004",
       "kind": "FEATURE",
       "num": 4,
