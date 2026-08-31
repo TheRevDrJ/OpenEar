@@ -65,6 +65,18 @@
       "verify": { "dev": "NA", "live": "NA" }
     },
     {
+      "id": "FEATURE-003",
+      "kind": "FEATURE",
+      "num": 3,
+      "title": "partial-hearing users fight the caption delay — they hear and read at once, and the two disagree",
+      "status": "OPEN",
+      "where": "SERVER",
+      "date": "2026-08-24",
+      "notes": "Terry Haynes, after working with his hearing-impaired congregation on a Sunday morning — the first real use data OpenEar has ever had from the population it exists for. His words: \"They find mostly find OpenEar very helpful. Those with more hearing have a rougher time then those who are more hearing loss because they try to do both. Once they get used to how it works, they like it better.\"\nTHE FINDING: profound hearing loss means the captions ARE the channel, so a 5-7s delay is just latency. Residual hearing means both channels are live at once, and the caption contradicts what the ear heard seconds ago. That is not waiting — it is conflict, and it is worst for the users with the MOST hearing.\n⭐ WE PRICED THE DELAY AGAINST ACCURACY AND NEVER AGAINST THIS. The 5s floor is a measured trade (3s = 14.4% WER against 4.1% at 5s) and it stands on its own terms. This is a cost on the other side of that ledger that nobody had counted, from the only people who can report it.\n⚠ NOT A DEFECT AND NOT URGENT — \"once they get used to how it works, they like it better.\" It resolves with familiarity. Do not reach for a fix on a report that ends well.\nWHERE A FIX MIGHT LAND, AND IT IS GENUINELY UNDECIDED: SERVER, if the answer is lower latency for a mode that wants it. CLIENT, if the answer is presentation — showing partial text as it arrives, or a setting for people who are also listening. Filed SERVER because the mechanism is chunking; revisit if the answer turns out to be display.\n⛔ DO NOT ASK A PASTOR'S CONGREGATION TO CHANGE HOW THEY LISTEN. The fix, if there is one, is ours.",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
       "id": "FEATURE-002",
       "kind": "FEATURE",
       "num": 2,
