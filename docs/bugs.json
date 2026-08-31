@@ -1,8 +1,6 @@
 {
   "note": "THE tracker for OpenEar. One file, one source, tracked in git. Read it on the workshop: python3 workshop/serve.py, then http://127.0.0.1:8002/bugs.html — 'Active' / 'Deferred' / 'Closed' are DERIVED from status, never stored.",
-
   "ids": "BUG = the shipped product misbehaves (a claim about the code, settled by fact) · FEATURE = something someone wants, including Jonathan (a claim about taste, settled by his call) · TOOL = anything using an internal tool rather than the shipped product — bug or request, one series. The prefix names the TYPE, never the project: a bug here and a bug in any other project are both BUG-NNN, because one tracker file per project means the project is already implied.",
-
   "statuses": [
     "OPEN",
     "IN PROGRESS",
@@ -15,11 +13,8 @@
     "DUPLICATE",
     "DECLINED"
   ],
-
   "docsTest": "MISSING vs WRONG, and it decides the kind (his ruling, 2026-08-23): \"If something is missing from the readme or another doc it's a feature. If something is wrong in the docs, it's a bug.\" A doc that fails to say a true thing is a gap someone wants filled — taste, his call, FEATURE. A doc that says a false thing is a claim about the product that does not hold — fact, checkable by anyone, BUG. Either way 'where' is DOCS. He named it after filing FEATURE-001 as a feature and then learning SETUP.txt was actively backwards rather than merely silent: \"when I told you feature, I didn't know we made a claim in the readme that was incorrect, so I thought it was a feature. If we claim something wrong, then it's a bug.\"",
-
   "resolutions": "The lifecycle is shared; the resolutions split by KIND. OPEN / IN PROGRESS / FIXED / VERIFIED apply to everything. A BUG may close BY DESIGN, UPSTREAM, NOT REPRODUCIBLE or DUPLICATE — never DECLINED, because declining is taste and a bug is fact. A FEATURE or TOOL may close DECLINED or DUPLICATE, or park as DEFERRED. DUPLICATE requires 'dupeOf'. DEFERRED requires a trigger in the notes — a condition someone else will meet, never a date and never an intention.",
-
   "where": [
     "SERVER",
     "CLIENT",
@@ -29,13 +24,9 @@
     "DOCS",
     "WEBSITE"
   ],
-
   "whereNote": "One value, and the test is mechanical: what does a FIX touch? Not how bad it is — that is 'blocking'. Entries of kind TOOL carry no 'where' at all; the kind already says it.\n\nDOCS added 2026-08-23, on Jonathan's ask: \"I think we need some kind of documentation flag for bug reports or something. I guess if the readmes are wrong they *are* bugs, but we need a way to indicate it's a doc problem, not a code problem.\" It is 'where' and not a new kind, because 'where' already asks exactly that question — what does a FIX touch — and the answer for a wrong README is the README. So a false statement in a doc stays a BUG (a claim about the product, settled by fact) and DOCS says the repair is prose, not code. Covers README.md, SETUP.txt, DEMO.md, and comments inside source: a comment that describes behaviour the code does not have is a doc defect living in a .py file.",
-
   "blocking": "\"blocking\": true is THE SHIP GATE, and absent means false. Nothing blocking may sit OPEN / IN PROGRESS / FIXED when we ship to a congregation. It replaced a CRITICAL/HIGH/MEDIUM/LOW severity scale because a boolean has no spelling — the old gate matched case-sensitively and an entry written 'high' could not satisfy it at all. Kind TOOL is excluded from the gate: a broken bench cannot make the server unfit to serve a service.",
-
   "verifying": "TWO STEPS, and an entry is VERIFIED only when BOTH are satisfied.\n  verify.dev  — shown working on a local/test run of the server\n  verify.live — shown working on Zora, the real deployment congregations reach\nEach is YES (done) · NO (possible, not done yet) · NA (not required there, or cannot be shown there).\n\nNA AUTO-CLEARS ITS STEP, so nothing strands on a check it can never take — 'dev NA' for anything that needs the CUDA box or real congregational load, 'live NA' for docs, the test harness, the workshop and the website.\n\nBOTH NA means the entry is done the moment the work is.\n\nWHY 'live' AND NOT 'build': OpenEar has no packaged artifact. It runs from source on the machine the church owns, so the real deployment IS the verification target. (FirstLight's second step is 'build' because a game ships as a binary; same rule, honest destination.)",
-
   "entries": [
     {
       "id": "BUG-001",
@@ -48,8 +39,13 @@
       "date": "2026-08-23",
       "notes": "Reported by Terry Haynes, First Presbyterian Santa Rosa — the first external user, running OpenEar off the public repo. His words: \"If Vmix is run first then we start the OpenEar server, Vmix just disappears. Trying to restart it will not see the cameras anymore. If I start OpenEar first, then Vmix, all is well.\"\nSetup: Dell desktop, VMix capturing 4 NDI cameras plus ProPresenter, streaming to YouTube.\nWORKAROUND (his, confirmed good for now): start OpenEar first, then VMix.\nTHEORY, UNCONFIRMED: GPU contention. At startup the server takes TensorRT then CUDA for Parakeet and ~3.5GB for NLLB (device='cuda' is hardcoded, no CPU fallback). Landing that demand on a GPU VMix already owns would explain both the crash and the ordering asymmetry. NEEDS: his system specs, whether translation is running, and openear.log from a failed start — the log settles it, because it says plainly whether CUDA loaded at all.\nONE MORE THING TO CHECK, from BUG-003: onnx_asr.load_model() passes NO provider, so onnxruntime takes the first available — TensorRT or CUDA on a machine that has them. If ASR is quietly on the GPU too, the startup demand is larger than the ~3.5GB translation figure suggests, and that matters here even though Parakeet does not REQUIRE a GPU. If it holds up, an explicit CPU provider for ASR may be the fix, and it costs nothing on a box with no card.\n\n=== HIS LOG ARRIVED 2026-08-30, AND IT IS FIVE LINES OF CLEAN SUCCESS ===\n  08:47:23 Loading Parakeet / 08:47:32 ASR loaded in 8.7s / 08:47:32 Loading NLLB / 08:47:42 NLLB loaded in 9.7s / 08:47:42 Server running at http://0.0.0.0:80\nNO ERROR, NO WARNING, NOTHING AFTER. So OpenEar did not crash — IT WON. It took CUDA, got its VRAM in a normal 9.7s, bound port 80, and VMix is what died. Every theory that had OpenEar failing is dead.\n⚠ AND THERE IS NO 'Audio capture started' LINE, so he never got as far as capturing. The log ends where he stopped to look at VMix.\n⛔ THE LOG CANNOT SETTLE THE REST, AND THAT IS OUR FAULT — see FEATURE-005. It records no provider and no VRAM figure, so the one question worth asking is unanswerable from the evidence we asked him to collect.\n⭐ PRIME SUSPECT IS NOW BUG-006: translation loads unconditionally at import. Terry's congregation is hearing-impaired English speakers, so the ~3.5GB that VMix loses the fight with may be serving nobody at all. Fixing BUG-006 is the cheapest thing that could resolve this, and it is worth trying before asking him for anything else.\n⚠ USABILITY SIGNAL FROM THE OTHER LOG, worth seeing even though it is not this bug: on Sunday 2026-08-23 he restarted the server FOUR times between 08:39:00 and 08:49:15, and only the last one reached 'Audio capture started'. That is a man fighting with software twenty minutes before a service.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" },
-      "was": ["OE-001"]
+      "verify": {
+        "dev": "NO",
+        "live": "NO"
+      },
+      "was": [
+        "OE-001"
+      ]
     },
     {
       "id": "BUG-005",
@@ -59,10 +55,15 @@
       "status": "OPEN",
       "where": "DOCS",
       "date": "2026-08-23",
-      "was": ["FEATURE-001"],
+      "was": [
+        "FEATURE-001"
+      ],
       "notes": "FILED AS A FEATURE, RE-KINDED THE SAME DAY. Jonathan's original ask was \"FEATURE - update readme to mention the intiial delay and reason\" — filed before either of us knew SETUP.txt made a claim that was wrong rather than absent. His ruling on learning it: \"when I told you feature, I didn't know we made a claim in the readme that was incorrect, so I thought it was a feature. If we claim something wrong, then it's a bug.\" See docsTest above.\nTHE DOC IS WRONG, NOT JUST SILENT. SETUP.txt:192 says \"English captions have zero added latency. Translated captions have a small additional delay (typically 1-3 seconds) depending on hardware.\" It has it backwards: English captions carry the FULL 5-10s chunk delay, and translation is the part that adds only a little on top. So a reader who measures 5-7s on English has been told that is impossible, and looks at his own setup instead. Terry Haynes did exactly that and mentioned his busy network.\nTHE REASON TO WRITE DOWN: server.py accumulates MIN_CHUNK_DURATION = 5 seconds of speech before transcribing, then cuts at the next silence, hard-capping at MAX_CHUNK_DURATION = 10. Parakeet needs a complete phrase to be accurate and to punctuate, and NLLB needs that punctuation to find sentence boundaries. Measured cost of shortening it: 3s chunks = 14.4% WER against 4.1% at 5s.\nThe fix touches SETUP.txt and the README both.\n\n=== AND '5-7 SECONDS' IS OUR NUMBER, NOT A MEASURED ONE. MEASURED 2026-08-30 ===\nFrom Terry's own two-week log, 4,195 real chunks in a real sanctuary:\n  median chunk 7.7s · p75 10.0s · p95 10.2s\n  39.2% of chunks (1,645) hit MAX_CHUNK_DURATION — ran the full 10s cap without ever finding a silence to cut on\n  silence-cut chunks median 6.0s; rms at the cut median 0.0023 against a 0.005 threshold, so when silence IS there it is found cleanly\nPreaching does not pause. Two of every five chunks simply never get a 0.5s gap inside ten seconds, and that is the input, not a misconfiguration.\n⭐ THE TWO NUMBERS PEOPLE QUOTE ARE BOTH RIGHT, AND THE DOC MUST SAY WHY. A chunk covering seconds 0-10 is transcribed at second 10, so the FIRST word in it waits ~10s and the LAST waits almost none. Average word lag is roughly HALF the chunk — about 3-4s, which is Jonathan's \"flows 3 seconds behind\" — while the worst word waits the whole cap, which is his \"7-10 second delay.\" Same chunk, different words. The variance is the experience, and no single number describes it honestly.\nSO THE FIX IS NOT 'CHANGE 5-7 TO 8'. Say what actually happens: captions arrive in phrases, each phrase appears when the speaker pauses or after ten seconds, so any given word waits between a moment and ten seconds. Then point at FEATURE-006, which is the thing an operator can actually do about it.",
       "closed": false,
-      "verify": { "dev": "NA", "live": "NA" }
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     },
     {
       "id": "BUG-007",
@@ -73,9 +74,12 @@
       "where": "SERVER",
       "blocking": true,
       "date": "2026-08-31",
-      "notes": "_translation_buffer is cleared in exactly two places: when a sentence completes (server.py ~477) and when capture STOPS (~707). Nowhere else. There is no flush on silence, no timeout, no per-segment boundary.\nSO: a chunk cut at MAX_CHUNK_DURATION is cut mid-speech and almost never ends in terminal punctuation, and its text sits in the buffer until some LATER chunk supplies a '.', '!' or '?'. Terry's log says 39.2% of real chunks hit that cap. If a capped chunk holds the last words before a hymn, that fragment is stranded through the whole hymn and is then glued onto the first sentence of whatever follows.\n⛔ AND NOTHING IS DISPLAYED WHILE IT WAITS — the entire transcript path in broadcast() sits inside the sentence-completion branch, so English clients get nothing either. A partial-hearing congregant watches a frozen caption while someone is visibly speaking. That is the worst possible failure for the exact people this product exists for (FEATURE-003).\nJonathan found the scope, 2026-08-31: \"'Start every message with a throwaway line' doesn't cover the entire service, only the sermon. I was scoping too small.\" A service is a welcome, announcements, readings, prayers, songs, a sermon, a benediction — every transition between them can strand text.\n⭐ NOT AN ASR QUALITY PROBLEM. transcribe_audio_chunk() hands raw audio straight to asr_model.recognize(); the buffer is downstream of that and operates on already-transcribed text. WER is a function of chunk size alone (3s=14.4%, 5s=4.1%, 10s=3.0%). Nothing here changes how accurate a word is, only when it appears.\n⬜ FIX IS UNDECIDED AND SHOULD WAIT ON RESEARCH: a silence-triggered flush is the obvious patch, but the better answer may be interim-hypothesis-then-revise, which is what production live captioning does. Open question for Felix — does onnx_asr / Parakeet-TDT expose streaming or partial decoding?",
+      "notes": "_translation_buffer is cleared in exactly two places: when a sentence completes (server.py ~477) and when capture STOPS (~707). Nowhere else. There is no flush on silence, no timeout, no per-segment boundary.\nSO: a chunk cut at MAX_CHUNK_DURATION is cut mid-speech and almost never ends in terminal punctuation, and its text sits in the buffer until some LATER chunk supplies a '.', '!' or '?'. Terry's log says 39.2% of real chunks hit that cap. If a capped chunk holds the last words before a hymn, that fragment is stranded through the whole hymn and is then glued onto the first sentence of whatever follows.\n⛔ AND NOTHING IS DISPLAYED WHILE IT WAITS — the entire transcript path in broadcast() sits inside the sentence-completion branch, so English clients get nothing either. The screen holds the last completed sentence while someone is visibly still speaking.\n⚠ NOBODY HAS REPORTED THIS. It is a defect found by reading the code, and it stands on that. An earlier version of this entry attached it to a congregant's experience that Bob had inferred rather than been told (see FEATURE-003, declined) — do not re-attach it. A real bug argued on a false premise loses the argument it should have won.\nJonathan found the scope, 2026-08-31: \"'Start every message with a throwaway line' doesn't cover the entire service, only the sermon. I was scoping too small.\" A service is a welcome, announcements, readings, prayers, songs, a sermon, a benediction — every transition between them can strand text.\n⭐ NOT AN ASR QUALITY PROBLEM. transcribe_audio_chunk() hands raw audio straight to asr_model.recognize(); the buffer is downstream of that and operates on already-transcribed text. WER is a function of chunk size alone (3s=14.4%, 5s=4.1%, 10s=3.0%). Nothing here changes how accurate a word is, only when it appears.\n⬜ FIX IS UNDECIDED AND SHOULD WAIT ON RESEARCH: a silence-triggered flush is the obvious patch, but the better answer may be interim-hypothesis-then-revise, which is what production live captioning does. Open question for Felix — does onnx_asr / Parakeet-TDT expose streaming or partial decoding?",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "verify": {
+        "dev": "NO",
+        "live": "NO"
+      }
     },
     {
       "id": "FEATURE-004",
@@ -87,7 +91,10 @@
       "date": "2026-08-30",
       "notes": "Jonathan, 2026-08-30: \"I'm finding more people want to use the transcription alone than I thought. I think we should split it cleanly in half. Transcription as the main, translation as a module. That way, I think transcription will run nicely on a mac, or a potato, almost.\"\nTHE EVIDENCE IS IN TERRY'S OWN LOG: nine server sessions across two weeks, and NLLB loaded on every single one — see BUG-006. His congregation is hearing-impaired English speakers. He may be paying ~3.5GB of VRAM, ~9s of every startup, and possibly his VMix install, for a model nobody in his building uses.\nWHAT IT UNLOCKS: captioning has no GPU requirement at all (Parakeet is CPU, BUG-003), so a transcription-only build runs on hardware a church already owns — which is core principle 2 and the README's own \"often $0\" promise, delivered rather than asserted. It also makes FEATURE-002 (macOS) mostly free, because the half that will not run on arm64 is the half being removed.\n⭐ SEQUENCING: BUG-006 is the cheap first cut of this and stands on its own. Do that before designing the module boundary — it is small, it probably fixes BUG-001, and it tells us what the seam actually wants to be.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "verify": {
+        "dev": "NO",
+        "live": "NO"
+      }
     },
     {
       "id": "BUG-006",
@@ -100,7 +107,10 @@
       "date": "2026-08-30",
       "notes": "server.py loads the 3.3B translation model at import time, unconditionally — no check on languages.json, no check on whether any client has ever asked for a translation. It is a bare try/except around ctranslate2.Translator(device='cuda'), so an English-only church pays ~3.5GB of VRAM and ~9 seconds of every cold start for nothing.\nMEASURED IN THE FIELD: Terry Haynes' log covers nine sessions from 2026-08-08 to 08-23, and NLLB loaded in all nine (8.9s, 9.1s, 9.0s, 10.1s, 9.1s, 8.9s, 9.7s, 12.3s, 9.4s). His congregation is hearing-impaired English speakers.\n⛔ WHY IT IS BLOCKING RATHER THAN AN EFFICIENCY NOTE: this is the most likely mechanism behind BUG-001. A church that never translates is still handing its GPU to a 3.3B model, and on Terry's box that is what VMix appears to lose the fight with.\nTHE FIX IS SMALL AND IS THE FIRST CUT OF FEATURE-004: load NLLB lazily — on first translation request, or at startup only when languages.json enables something other than English. Keep the failure path exactly as it is; translation already degrades gracefully to None.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "verify": {
+        "dev": "NO",
+        "live": "NO"
+      }
     },
     {
       "id": "FEATURE-005",
@@ -112,7 +122,10 @@
       "date": "2026-08-30",
       "notes": "BUG-001 has been open for a week on a question the log cannot answer: does ASR take a GPU provider alongside translation, and how much VRAM does startup actually claim? onnx_asr.load_model() is called with no provider argument, so onnxruntime picks the first available — CUDA or TensorRT on a machine that has them — and nothing anywhere records which one it got.\nTerry sent the log from the exact failed start. It is five lines, every one of them a clean success, and it contains no fact that bears on the bug. THAT is the defect: we asked a user to capture evidence and the instrument had nothing to capture.\nFIX: at startup log (a) the onnxruntime provider actually in use for ASR, (b) the CTranslate2 device for translation, (c) free and total VRAM before and after each model loads. Three lines, and they turn every future user's log into evidence instead of a receipt.\n⭐ rules.md 6b — a report that cannot distinguish success from a broken instrument is not a measurement.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "verify": {
+        "dev": "NO",
+        "live": "NO"
+      }
     },
     {
       "id": "FEATURE-006",
@@ -124,19 +137,25 @@
       "date": "2026-08-30",
       "notes": "Jonathan's technique, 2026-08-30: \"There's also some training we can do for pastors... If they just start with a throwaway sentence like, 'We have our service running through OpenEar today, you can scan the QR code in your bulletin to connect,' every time, that'll get them caught up and they won't have that 7-10 second delay.\"\nIt works because the first chunk of a session is the one nobody is waiting through yet. Spend it on a sentence that does not matter and is ALSO the announcement that tells the congregation how to connect — one sentence doing two jobs.\n⭐ THIS IS THE CHEAPEST FIX ON THE BOARD. It costs a line in the docs and no code, and it lands on the exact moment the delay is most visible — the start, when everyone has just opened the page and is watching an empty screen.\nGoes wherever operator guidance lives; pair it with BUG-005, since both are about telling the truth about the delay.",
       "closed": false,
-      "verify": { "dev": "NA", "live": "NA" }
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     },
     {
       "id": "FEATURE-003",
       "kind": "FEATURE",
       "num": 3,
-      "title": "partial-hearing users fight the caption delay — they hear and read at once, and the two disagree",
-      "status": "OPEN",
+      "title": "partial-hearing users have a rougher time — reported as an observation, not a problem",
+      "status": "DECLINED",
       "where": "SERVER",
       "date": "2026-08-24",
-      "notes": "Terry Haynes, after working with his hearing-impaired congregation on a Sunday morning — the first real use data OpenEar has ever had from the population it exists for. His words: \"They find mostly find OpenEar very helpful. Those with more hearing have a rougher time then those who are more hearing loss because they try to do both. Once they get used to how it works, they like it better.\"\nTHE FINDING: profound hearing loss means the captions ARE the channel, so a 5-7s delay is just latency. Residual hearing means both channels are live at once, and the caption contradicts what the ear heard seconds ago. That is not waiting — it is conflict, and it is worst for the users with the MOST hearing.\n⭐ WE PRICED THE DELAY AGAINST ACCURACY AND NEVER AGAINST THIS. The 5s floor is a measured trade (3s = 14.4% WER against 4.1% at 5s) and it stands on its own terms. This is a cost on the other side of that ledger that nobody had counted, from the only people who can report it.\n⚠ NOT A DEFECT AND NOT URGENT — \"once they get used to how it works, they like it better.\" It resolves with familiarity. Do not reach for a fix on a report that ends well.\nWHERE A FIX MIGHT LAND, AND IT IS GENUINELY UNDECIDED: SERVER, if the answer is lower latency for a mode that wants it. CLIENT, if the answer is presentation — showing partial text as it arrives, or a setting for people who are also listening. Filed SERVER because the mechanism is chunking; revisit if the answer turns out to be display.\n⛔ DO NOT ASK A PASTOR'S CONGREGATION TO CHANGE HOW THEY LISTEN. The fix, if there is one, is ours.\n⭐ MEASURED 2026-08-30, AND IT SHARPENS THE REPORT: the wait is not a constant, it is a SAWTOOTH. A word spoken at the start of a chunk waits the whole chunk; a word at the end appears almost at once. Terry's real median chunk is 7.7s and 39.2% run the full 10s cap (BUG-005), so a partial-hearing listener hears a word and then waits somewhere between a moment and ten seconds for it — unpredictably, every phrase. ⛔ THAT IS WHY IT IS HARDER FOR THEM THAN A LONGER FIXED DELAY WOULD BE. A steady lag can be adapted to; a varying one cannot, which is exactly why it improves 'once they get used to how it works' and never fully goes away.\n⚠ SO A FIX AIMED AT THE MEAN MAY MISS. Cutting median latency while leaving the 39% cap rate alone would barely change what these listeners experience.",
-      "closed": false,
-      "verify": { "dev": "NO", "live": "NO" }
+      "notes": "Terry Haynes, after a Sunday with his hearing-impaired congregation, 2026-08-24. His words, whole, because the shape of them is the point: \"I was working with some of our hearing-impaired congregation. This morning. They find mostly find OpenEar very helpful. Those with more hearing have a rougher time then those who are more hearing loss because they try to do both. Once they get used to how it works, they like it better.\" And: \"One person mentioned they just want to be 'normal'. This helps them participate like everyone else.\"\nDECLINED BECAUSE NO PROBLEM WAS REPORTED. That is a positive report containing an observation. It says helpful, it says they like it better once familiar, and it never mentions the caption delay at all.\nWHAT BOB DID, recorded so it is not repeated: took \"they try to do both\" and mapped it onto the latency mechanism we already had in hand, then wrote it into this entry under a heading reading THE FINDING, with a story about residual hearing conflicting with delayed captions. Terry claimed none of that. \"Try to do both\" may be the delay; it may equally be divided attention, which would be just as true at zero latency. Nobody knows, and the entry read as though somebody did.\nJonathan, 2026-08-31: \"Maybe we're trying to solve a problem that wasn't reported as one, Bob... I feel like you inferred a continuation of the problem that I didn't see him declare.\"\nAGGRAVATOR WORTH KEEPING: this entry was filed WITH the correct hedge — 'not a defect and not urgent, it resolves with familiarity, do not reach for a fix on a report that ends well' — and then a later measurement pass appended a mechanism section that quietly promoted it back to a problem. Bob argued himself out of his own hedge. A hedge that survives filing and dies on the second pass is worse than none, because by then it looks like accumulated evidence.\nNOTHING ELSE DEPENDS ON THIS. BUG-005 (SETUP.txt states the latency backwards) came from Terry's FIRST email and stands. BUG-006 and BUG-007 were found by reading code and stand without any user report at all. This entry was the only one resting on an inference.\nIF IT IS REAL, IT WILL ARRIVE AS A REPORT. Terry has written twice unprompted and has shown he will say what he sees. That is not a trigger, it is a reason not to invent one.",
+      "closed": true,
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     },
     {
       "id": "FEATURE-002",
@@ -148,7 +167,10 @@
       "date": "2026-08-23",
       "notes": "Jonathan, 2026-08-23: \"I have a mac m5 max w/ 128gb of RAM. If we can get it to run at all, it'll run on my box. It is, I think, the best mac in production right now. So we can just go balls to the wall and see if it even works.\"\nOPEN, NOT DEFERRED, and he said so directly — the trigger would have been CUSTOMER REQUEST, but the hardware to try it is already on his desk.\nWHY IT WAS OFF THE TABLE, AND WHY THAT EXPIRED: the Mac was rejected 2026-07-30 after a cost analysis — a $1300 16GB Mac Mini against a CUDA box that works. That compared hardware HE would have to buy. A church that already owns a Mac has a hardware line of $0, and the comparison never happens. His words: \"I rejected it for *my* use, forgetting, or never realizing, that someone could download it from github.\" Terry Haynes has been a fact for five days. (rules.md 7b — an inherited constraint carrying its ancestor's economics.)\nTHE SEAMS, COUNTED NOT ESTIMATED (2026-08-23):\n  - the two CUDA DLL blocks in server.py are already wrapped in try/except ImportError, so they no-op off Windows. Nothing to do.\n  - ONE hardcoded string: device='cuda' at server.py:217, translation, no fallback. This is the only real code change.\n  - four Windows scripts need macOS equivalents: openear.bat, setup.bat, kill_openear.ps1, sshmake.ps1. This reverses \"no .sh counterparts are wanted\" (rules_project.md section 2, 2026-07-29) — a ruling made when Jonathan was the only deployment.\n  - port 80 needs root on macOS. NOT A BLOCKER and not a threat to core principle 2: \"if 80 is hard on a mac, then 8000 or whatever becomes the easiest thing. the goal is: the easiest possible solution for a church.\"\nCAPTIONING SHOULD SIMPLY WORK — Parakeet runs on CPU (BUG-003).\n⛔ TRANSLATION IS NOT A SPEED PROBLEM. Jonathan, 2026-08-23: \"NLLB does NOT work w/ ctranslate2 on arm64. So we'd have to find another solution. At least that's what I remember.\" His recollection, not re-measured — but it moves this from 'may be slow' to 'needs a different translation engine', which is a different and much larger piece of work. ⭐ ANY REPLACEMENT GOES THROUGH MODELS.md FIRST — that registry exists so we never evaluate the same model twice, and it already holds the NLLB-vs-MADLAD result.\nSO THE HONEST SHAPE OF THIS ENTRY IS TWO STEPS: (1) captioning on macOS, which is small and probably works today; (2) translation on macOS, which is an open research question and should not hold up step 1.",
       "closed": false,
-      "verify": { "dev": "NO", "live": "NA" }
+      "verify": {
+        "dev": "NO",
+        "live": "NA"
+      }
     },
     {
       "id": "BUG-002",
@@ -160,7 +182,10 @@
       "date": "2026-08-23",
       "notes": "SCOPED DOWN BY JONATHAN AFTER READING IT HIMSELF, 2026-08-23: \"It says transcription runs on cpu via parakeet, translation limited without nvidia gpu. That's pretty true. But we could change it to 'not currently supported'. I don't want to get into it now anyway. We have the bug database for this.\"\nSo the CAPABILITY lines are fine. What is wrong is the STATUS around them, in three places: line 74 \"Mac Mini M4 (in testing)\", line 77 \"Status: v0.6 — actively being tested\", and line 101 \"the goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality\". Line 133's roadmap row already says \"rejected after cost analysis — Done\". Only that row was swept; the prose around it survived, and a reader takes the top one.\n⭐ THE TARGET WORDING IS \"NOT CURRENTLY SUPPORTED\", NOT \"REJECTED\" (his). \"Rejected\" describes a decision about HIS OWN dev machine and reads to a stranger as \"it does not work\" — so a Mac-owning church closes the tab over four missing shell scripts. That is the part of this entry that can cost us a user today.\n⚠ HOLD THE ACTUAL EDIT UNTIL FEATURE-002 REPORTS. We are about to find out what a Mac really does, and there is no sense writing this section twice.\nWHAT IT SHOULD SAY (Jonathan's basis, 2026-08-23): OpenEar does not officially support macOS today. Transcription runs on it; translation does not. Mac support is deferred until there is enough demand, and in the meantime anyone can fork it — transcription will run, but they will need macOS equivalents of the Windows batch files.\nTHE TRANSCRIPTION HALF IS SETTLED (BUG-003): Parakeet runs on CPU, so it has no GPU requirement to port.\n⚠ THE TRANSLATION HALF IS NOT MEASURED. \"Cannot\" is the honest word for our stack today — NLLB runs through CTranslate2 with device='cuda' hardcoded and no CPU fallback — but nobody has tried NLLB on Apple Silicon CPU, so we do not know whether it is impossible or merely too slow to use in a service. Say what we support, not what the hardware can never do.",
       "closed": false,
-      "verify": { "dev": "NA", "live": "NA" }
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     },
     {
       "id": "BUG-003",
@@ -172,7 +197,10 @@
       "date": "2026-08-23",
       "notes": "rules_project.md section 2 said \"NLLB-3.3B via CTranslate2 and Parakeet via onnxruntime-gpu BOTH demand CUDA\" — while server.py's own comment above the load call says ASR \"Runs on CPU\" and the README's reference-server table says \"ASR model | Parakeet-TDT-0.6B (CPU)\". Two against one, and none of the three was a measurement, so Bob raised it as unsettled.\nSETTLED BY JONATHAN, and the reasoning needs no instrument: \"Parakeet is the transcription model right? It runs on cpu on Windows, and can run on mac. If it runs on cpu on windows, it clearly doesn't need a gpu.\" CPU is CPU. A model that transcribes in real time off a Ryzen has no GPU requirement to port.\nFIX: rules_project.md section 2 now says translation is what needs CUDA, and that a Mac can caption but cannot translate.\nA SEPARATE AND SMALLER QUESTION SURVIVES, moved to BUG-001 where it actually matters: load_model() passes no provider, so on Zora onnxruntime may hand ASR to TensorRT/CUDA anyway. That does not change what the model REQUIRES; it changes what Zora happens to do, which is relevant to the VMix contention theory and nothing else.",
       "closed": true,
-      "verify": { "dev": "NA", "live": "NA" }
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     },
     {
       "id": "BUG-004",
@@ -184,7 +212,10 @@
       "date": "2026-08-23",
       "notes": "Left over from the pre-Parakeet era: the CUDA DLL block explains itself as \"so that faster-whisper can load the GPU acceleration libraries\", a section banner reads \"FASTAPI APP & WHISPER MODEL\", and SAMPLE_RATE is commented \"16kHz — what Whisper expects\".\nThere is no Whisper here. The stack is onnx-asr (Parakeet) + ctranslate2 (NLLB) + onnxruntime-gpu, and rules_project.md says plainly \"There is no PyTorch here... Don't reach for torch to test the GPU.\"\nSame family as the file's docstring, which claimed v0.5 and faster-whisper until it was rewritten 2026-08-23 — these three survived that pass because the pass fixed the header and not the body.\nComments only; no behaviour changes and no version bump.",
       "closed": false,
-      "verify": { "dev": "NA", "live": "NA" }
+      "verify": {
+        "dev": "NA",
+        "live": "NA"
+      }
     }
   ]
 }
