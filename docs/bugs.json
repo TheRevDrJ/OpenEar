@@ -66,6 +66,42 @@
       }
     },
     {
+      "id": "FEATURE-007",
+      "kind": "FEATURE",
+      "num": 7,
+      "title": "transcribe a NON-English speaker — Spanish in, English out",
+      "status": "OPEN",
+      "where": "MODELS",
+      "date": "2026-09-01",
+      "notes": "Asked for at the conference office demo, 2026-09-01, by two native Spanish speakers responsible for diversification of resources. The service is in Spanish; the captions should be English (or anything else).\nTWO HARDCODES STAND IN THE WAY, and both are one line:\n  server.py:110  ASR_MODEL = 'nemo-parakeet-tdt-0.6b-v2' — Parakeet-TDT 0.6b v2 is ENGLISH ONLY. This needs a different ASR model, and that is a MODELS.md question before it is a code question.\n  server.py:424  tokens = ['eng_Latn'] + tokens + ['</s>'] — NLLB's SOURCE language is hardcoded English. NLLB itself translates any of its 200 languages to any other, so the translation half already supports this; only that literal is in the way.\n⭐ SO THE TRANSLATION SIDE IS NEARLY FREE AND THE ASR SIDE IS THE WHOLE JOB. Candidates go through MODELS.md first — that registry exists so we never evaluate the same model twice, and it already holds the NLLB/MADLAD result.\n⚠ A multilingual ASR model is bigger than Parakeet 0.6b and will cost VRAM. Jonathan's framing to them, and it is the governing constraint on all three of these requests: \"it would require more and bigger models and it increases the hardware requirements dramatically with each addition, and right now an increase in the COST of hardware is almost exponential.\"",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
+      "id": "FEATURE-008",
+      "kind": "FEATURE",
+      "num": 8,
+      "title": "speak the translation aloud — English in, translated VOICE out",
+      "status": "OPEN",
+      "where": "SERVER",
+      "date": "2026-09-01",
+      "notes": "Asked for at the conference office demo, 2026-09-01. Today a congregant READS the translation; this is hearing it.\n⭐ THE ENGINE IS ALREADY IN THE FAMILY — OpenVoice is ours, runs on Zora, and does exactly this. That makes it a wiring and hardware question rather than a research one.\n⚠ THE HARD PART IS NOT SYNTHESIS, IT IS LATENCY, AND IT IS WORSE THAN IT LOOKS. Captions already lag 5-10s (BUG-005), and speech would add synthesis time on top. A READER can skim a late caption and catch up; a LISTENER cannot — audio arrives at the speed it arrives. So the delay that is tolerable for text may not be tolerable for voice, and that judgment needs a real listener, not our arithmetic.\n⚠ AND IT IS A DIFFERENT PRODUCT IN THE PEW: translated audio means headphones, which means the listener can no longer hear the preacher's own voice, the music, or the room. Captions sit alongside the service; audio replaces part of it. Worth deciding deliberately rather than discovering.\nSame hardware constraint as FEATURE-007.",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
+      "id": "FEATURE-009",
+      "kind": "FEATURE",
+      "num": 9,
+      "title": "foreign to foreign voice — speech in one language, speech out in another",
+      "status": "OPEN",
+      "where": "SERVER",
+      "date": "2026-09-01",
+      "notes": "Asked for at the conference office demo, 2026-09-01. The full pipeline: a Spanish speaker is heard in Korean.\nIT IS FEATURE-007 PLUS FEATURE-008 AND SHOULD NOT BE STARTED BEFORE BOTH — multilingual ASR in, NLLB across, synthesis out. Every cost stacks: a bigger ASR model, a TTS model, and both latencies in series.\n⚠ FILE IT SO IT IS ON THE BOARD, NOT BECAUSE IT IS NEXT. Its value today is that it names the far end of what was asked for, so 007 and 008 can be judged as steps toward something rather than as isolated asks.\n⭐⭐ AND ALL THREE ARE THE ARGUMENT FOR FEATURE-004, NOT A COMPETITOR TO IT. These push hardware requirements UP; the transcription/translation split pushes them DOWN. Both are right, for different churches, and a MODULE SYSTEM is what lets one product serve both — a church with a potato installs nothing extra and gets captions; a conference with a budget installs the modules it wants. Every one of these requests strengthens the case for the provider architecture rather than competing with it.",
+      "closed": false,
+      "verify": { "dev": "NO", "live": "NO" }
+    },
+    {
       "id": "BUG-007",
       "kind": "BUG",
       "num": 7,
