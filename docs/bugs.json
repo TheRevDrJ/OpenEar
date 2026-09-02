@@ -111,20 +111,22 @@
       }
     },
     {
-      "id": "BUG-008",
-      "kind": "BUG",
-      "num": 8,
-      "title": "README says a 6GB card is 'plenty' for translation — it is not, if anything else uses the GPU",
+      "id": "FEATURE-010",
+      "kind": "FEATURE",
+      "num": 10,
+      "title": "README should say the 4.5GB is on top of whatever else uses that GPU",
       "status": "OPEN",
       "where": "DOCS",
-      "blocking": true,
       "date": "2026-09-01",
-      "notes": "README, hardware section: \"OpenEar's translation needs only ~4.5 GB of VRAM, so an inexpensive NVIDIA card with 6 GB or more is plenty.\"\nMEASURED: OpenEar takes 4619 MiB (BUG-006). On a 6144 MiB card that leaves ~1500 MiB before Windows takes its share on a display-attached GPU. That is enough for OpenEar ALONE and not enough for OpenEar beside anything else.\n⛔ AND THE READER WE KNOW ABOUT IS RUNNING vMIX. Terry Haynes has a GTX 1660 Ti — 6GB, exactly what this line recommends — and it is why BUG-001 exists. A church installing OpenEar is very often putting it on the machine that already runs their streaming stack, because that is the machine that has the audio. The recommendation is written as though OpenEar has the card to itself, and for the target user it usually does not.\n⭐ THE FIX IS NOT JUST A BIGGER NUMBER. Say what the 4.5GB is FOR (translation only — transcription uses no VRAM at all, measured), and say the number is on top of whatever else uses that GPU. A church doing captions only needs no card. A church doing translation on a dedicated box can use 6GB. A church doing translation on their streaming PC needs 8GB as a floor and more with headroom.\n⚠ blocking: this is a hardware purchasing recommendation on a public README, and someone has already bought against it.",
+      "notes": "README, hardware section: \"OpenEar's translation needs only ~4.5 GB of VRAM, so an inexpensive NVIDIA card with 6 GB or more is plenty.\"\nFILED BY BOB AS A BUG AND RE-KINDED BY JONATHAN THE SAME DAY. His ruling: \"'An inexpensive NVIDIA card with 6 GB or more is plenty' is *not* wrong. It's just not specific enough. OpenEar depends on having its own machine. If people want to use vram on that machine for other stuff, then they'll need more. That's something that we shouldn't have to say, but I don't mind saying. But it's not a problem w/ documentation.\"\n⭐ HE IS RIGHT AND IT IS HIS OWN TEST: missing is a FEATURE, wrong is a BUG. Measured, OpenEar takes 4619 MiB and a 6144 MiB card holds it with room to spare. The sentence is TRUE for OpenEar on its own machine, which is the assumption the product is built on. What is absent is a caveat, not a correction.\n⛔ AND BOB'S SUPPORTING PREMISE WAS FALSE, which is the part worth remembering: the entry argued that a church \"usually\" installs OpenEar on the streaming PC \"because that is the machine that has the audio.\" It is not — audio arrives over a CABLE from the soundboard and will reach any box in the room. Terry Haynes chose to co-locate; nothing required him to. Bob turned a user's choice into a product requirement and then blamed the README for it.\nWHAT TO ADD, and it is one sentence rather than a rewrite: the ~4.5GB is for TRANSLATION ONLY — transcription uses no VRAM at all, measured — and it is on top of anything else sharing that GPU. A box doing captions needs no card. A box doing translation and nothing else is fine at 6GB. A box also running a streaming stack wants 8GB as a floor.\n⚠ NOT BLOCKING. It was marked so while it was mis-filed as a false claim; a missing caveat does not make the software unfit to serve a service.",
       "closed": false,
       "verify": {
         "dev": "NA",
         "live": "NA"
-      }
+      },
+      "was": [
+        "BUG-008"
+      ]
     },
     {
       "id": "BUG-007",
