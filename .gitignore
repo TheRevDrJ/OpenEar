@@ -258,6 +258,12 @@ core_principles.md
 # The bug tracker is private: kept on disk, never in the repo
 /docs/bugs.json
 
+# The workshop is not tracked in a public repo.
+# A bench is an internal tool and it reads the private layer — the tracker bench
+# renders the gitignored tracker — so it belongs beside the notes it reads rather
+# than in a clone. A repo that is private and staying private may track one.
+/workshop/
+
 # The public key authorized for passwordless admin SSH by `setup.bat --remote`.
 # Per-machine and never shipped: an installer that carries a maintainer's key
 # grants that maintainer admin login to everyone who runs it.
