@@ -6,8 +6,7 @@
 # nothing else. Replaces an older wmic-based query in openear.bat; wmic is
 # deprecated and absent from recent Windows builds, so we use Get-CimInstance.
 #
-# Safety (see BOB rules.md §12 — process-kills are rm -rf tier, kill narrow
-# never broad): a process is a target ONLY if its command line contains
+# Safety (process-kills are rm -rf tier, so kill narrow, never broad): a process is a target ONLY if its command line contains
 # "server.py". An empty match list kills nothing — there is no fall-through to
 # a broad match. Each PID is validated > 0 before Stop-Process is called with
 # that explicit -Id. Exits with the number of processes killed, so the caller

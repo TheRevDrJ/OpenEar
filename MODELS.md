@@ -25,7 +25,7 @@ figure published elsewhere.
 ¹ Non-commercial, and that is **fine here**: OpenEar does not ship the weights. Setup
 *downloads* them, so AGPL code and NC weights meet at runtime on the user's own disk
 as two separately-licensed works. **The operative rule is: never bundle the weights.**
-Settled — see `FOB/LICENSING_REFERENCE.md` in Felix's briefcase; do not re-litigate.
+This licensing question is settled; do not re-litigate it.
 
 ---
 
@@ -72,7 +72,7 @@ as fast.
 and **2.6× slower on Korean** — which matters for a live captioning product.
 
 **Why it looked promising:** Apache-2.0 rather than CC-BY-NC, one model covering all
-four enabled languages, and a smaller download. Recommended by Felix on those grounds.
+four enabled languages, and a smaller download. Those were the grounds for testing it.
 
 **Why it lost:**
 - Systematically mishandles compound theological terms — renders "justifying grace" as
@@ -94,7 +94,7 @@ NLLB. Getting that backwards yields fluent output in the wrong language.
 | Model | Why not tested |
 |---|---|
 | Whisper large-v3 / turbo (ASR) | Tested 2026-03 — see `BENCHMARK_REPORT.md`. Lost to Parakeet on punctuation consistency, which directly degrades translation quality downstream. |
-| Apple Silicon / CoreML stack | Not a model question. Killed 2026-07-31 on **cost**, not capability — the $599 Mac mini that justified it was retired; 16 GB now ~$1300. See `STATE.md`. |
+| Apple Silicon / CoreML stack | Not a model question. Killed 2026-07-31 on **cost**, not capability — the $599 Mac mini that justified it was retired; 16 GB now ~$1300. |
 
 ---
 

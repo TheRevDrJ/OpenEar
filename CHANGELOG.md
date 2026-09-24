@@ -129,7 +129,7 @@ language that already performs worst.
 verification: 95.0% adequate, against Korean's 77.5%.*
 
 > **Note on release headings.** From this release forward, headings describe the change
-> rather than naming a theme (Jonathan's ruling, 2026-07-31). A changelog is read by
+> rather than naming a theme. A changelog is read by
 > someone deciding whether they care, and "Second Language" does not help them decide.
 > Earlier entries keep their names — those releases had genuine themes.
 

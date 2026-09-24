@@ -3,31 +3,31 @@
 
 WHAT THIS IS
 ------------
-The tool-bench that sits beside the app (rules.md §16): a small server whose only
-job is to show me things about this project in Jonathan's own browser. Today it
-serves one bench — the bug tracker. More will accrete; that is the pattern.
+The tool-bench that sits beside the app: a small server whose only job is to
+show things about this project in a local browser. Today it serves one bench —
+the bug tracker. More will accrete; that is the pattern.
 
     python3 workshop/serve.py        ->  http://127.0.0.1:8002/
 
 WHY PORT 8002
 -------------
-The convention is that a project's tools live in that project's hundred-block
-(ports.md) — FirstLight runs on 6400, so its workshop is 6402. OpenEar runs on
-**80**, which has no block, and the literal +2 would be port 82: below 1024, so
-macOS would demand sudo every time Jonathan opened his own bug tracker. 8002
-keeps the rule's intent — the tools sit in the app's range, unmistakably "port
-80's block" — without the friction. His call, 2026-08-23.
+The convention is that a project's tools live in that project's hundred-block —
+FirstLight runs on 6400, so its workshop is 6402. OpenEar runs on **80**, which
+has no block, and the literal +2 would be port 82: below 1024, so
+macOS would demand sudo every time the bug tracker was opened. 8002 keeps the
+convention's intent — the tools sit in the app's range, unmistakably "port 80's
+block" — without the friction.
 
 WHY PURE STDLIB, NO FASTAPI
 ---------------------------
 The app's venv lives on Zora and needs CUDA. This runs on the Mac, where
-Jonathan actually reads. Depending on nothing means it works on either machine,
+the bench is actually read. Depending on nothing means it works on either machine,
 with no install, forever — the same reasoning as score_translation.py.
 
 ⛔⛔ READ-ONLY BY CONSTRUCTION, NOT BY A FLAG
 --------------------------------------------
-***His standing ruling: "I also never want to have write access to this tool.
-read only." and "I WANT BUGS TO GO THROUGH BOB."***
+***This tool never has write access. It is read-only, and bugs are filed by the
+developer, not through this server.***
 
 FirstLight's workshop carries a `FILING_ENABLED = False` switch because the
 filing form was built first and disabled after. Here there is no form and no
@@ -35,16 +35,15 @@ write route to disable — **the server has no code path that mutates anything.*
 That is strictly stronger: a flag can be flipped by someone who does not know
 why it is off; an absent route cannot.
 
-⛔ So if a future me is asked for a "file a bug" button: that is a conversation
-with Jonathan, not an edit to this file. Triage is a judgment (rules.md §20's
-second counterweight) — is this a duplicate, which area, what severity — and a
-judgment does not go in a form.
+⛔ So if a "file a bug" button is ever requested: that is a design decision for
+the project owner, not an edit to this file. Triage is a judgment — is this a
+duplicate, which area, what severity — and a judgment does not go in a form.
 
 ⛔⛔ THE TRACKER IS READ FRESH OFF DISK ON EVERY REQUEST
 -------------------------------------------------------
 Never cached, never imported, never held in memory between requests. FirstLight
 learned this the hard way (TL-038): a cached tracker made the bench permanently
-stale and Jonathan read a closed entry as open three times in one session. A
+stale and a closed entry was read as open three times in one session. A
 handler that opens the file when asked has no cache to go stale.
 
 `/__bugs-stamp` is the cheap half of the same question — mtime and size, ~40
