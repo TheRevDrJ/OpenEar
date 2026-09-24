@@ -1,0 +1,820 @@
+<!--
+  OpenEar — Real-time AI captioning and translation for churches
+  Copyright (c) 2026 TheRevDrJ
+  Licensed under AGPL-3.0 — see LICENSE file for details
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenEar Admin</title>
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #111827;
+    --text: #f1f0eb;
+    --text-dim: #9ca3af;
+    --accent: #60a5fa;
+    --danger: #f87171;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --surface: #1f2937;
+    --surface-hover: #374151;
+  }
+
+  html.light {
+    --bg: #f5f5f0;
+    --text: #1a1a2e;
+    --text-dim: #6b7280;
+    --accent: #3b82f6;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --surface: #e5e5e0;
+    --surface-hover: #d1d5db;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .card h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .card-header h2 { margin-bottom: 0; }
+
+  .collapse-btn {
+    background: var(--surface-hover);
+    color: var(--text-dim);
+    border: none;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .collapse-btn:hover { background: #4b5563; color: var(--text); }
+
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  select {
+    width: 100%;
+    padding: 14px 16px;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    background: var(--bg);
+    color: var(--text);
+    border: 2px solid var(--surface-hover);
+    border-radius: 12px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239ca3af' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+  }
+
+  select:focus { outline: none; border-color: var(--accent); }
+
+  .toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toggle-label { font-size: 20px; font-weight: 700; }
+
+  .toggle-status { font-size: 14px; color: var(--text-dim); margin-top: 4px; }
+  .toggle-status.active { color: var(--success); }
+
+  .toggle { position: relative; width: 72px; height: 40px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+
+  .toggle-track {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-hover);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 4px;
+    width: 32px; height: 32px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: transform 0.3s;
+  }
+
+  .toggle input:checked + .toggle-track { background: var(--success); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(32px); }
+  .toggle input:disabled + .toggle-track { opacity: 0.4; cursor: not-allowed; }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 15px;
+  }
+
+  .info-row:not(:last-child) { border-bottom: 1px solid var(--surface-hover); }
+
+  .info-label { color: var(--text-dim); }
+  .info-value { font-weight: 700; }
+  .info-value.mono { font-family: monospace; font-size: 14px; }
+
+  .error-msg {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--danger);
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 12px;
+    display: none;
+  }
+
+  .refresh-btn {
+    background: var(--surface-hover);
+    color: var(--text-dim);
+    border: none;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+
+  .refresh-btn:hover { background: #4b5563; color: var(--text); }
+
+  #server-down {
+    display: none;
+    background: rgba(248, 113, 113, 0.12);
+    border: 2px solid var(--danger);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  #server-down.visible { display: block; }
+
+  #server-down .down-text {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--danger);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  #server-down .down-sub {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .meter-container { margin-top: 16px; }
+
+  .meter-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .meter-label span { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+
+  .clip-indicator {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--danger);
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .clip-indicator.active { opacity: 1; }
+
+  .meter-track {
+    height: 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    transition: width 0.15s ease-out, background 0.3s;
+    background: var(--success);
+  }
+
+  .meter-fill.warm { background: var(--warning); }
+  .meter-fill.hot { background: var(--danger); }
+
+  /* --- Language management --- */
+  .lang-list {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-hover) transparent;
+  }
+
+  .lang-list::-webkit-scrollbar { width: 6px; }
+  .lang-list::-webkit-scrollbar-track { background: transparent; }
+  .lang-list::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 3px; }
+  .lang-list::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  .lang-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 14px;
+  }
+
+  .lang-item:not(:last-child) { border-bottom: 1px solid var(--surface-hover); }
+
+  .lang-name { font-weight: 500; }
+  .lang-name.disabled { color: var(--text-dim); }
+
+  .lang-switch { position: relative; display: block; width: 28px; height: 16px; flex-shrink: 0; align-self: center; transform: translateY(3px); }
+  .lang-switch input { opacity: 0; width: 0; height: 0; }
+
+  .lang-slider {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-hover);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+
+  .lang-slider::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 12px; height: 12px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: left 0.3s;
+  }
+
+  .lang-switch input:checked + .lang-slider { background: var(--success); }
+  .lang-switch input:checked + .lang-slider::after { left: 14px; }
+  .lang-switch input:disabled + .lang-slider { opacity: 0.4; cursor: not-allowed; }
+
+  .lang-search {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border: 1px solid var(--surface-hover);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+  }
+
+  .lang-search::placeholder { color: var(--text-dim); }
+
+  .qr-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #qr-code {
+    border-radius: 12px;
+    padding: 16px;
+    background: #ffffff;
+    display: inline-block;
+  }
+
+  .qr-url {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .qr-hint {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .theme-btn {
+    background: var(--surface);
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    line-height: 0;
+  }
+
+  .theme-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+  html.light .collapse-btn { background: #d1d5db; color: #4b5563; }
+  html.light .collapse-btn:hover { background: #9ca3af; color: #1a1a2e; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="admin-header">
+    <div>
+      <h1>OpenEar Admin</h1>
+      <p class="subtitle">Server-side audio capture and transcription control</p>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" id="theme-btn">
+      <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+  </div>
+
+  <div id="server-down">
+    <div class="down-text">Server Unreachable</div>
+    <div class="down-sub">Cannot connect to OpenEar server. Is it running?</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Share with Congregation</h2>
+      <button class="collapse-btn" id="qr-toggle" onclick="toggleQR()">Hide</button>
+    </div>
+    <div class="qr-section" id="qr-section">
+      <div id="qr-code"></div>
+      <div class="qr-url" id="qr-url">Loading...</div>
+      <div class="qr-hint">Scan or visit this URL on any device on the WiFi</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Audio Device</h2>
+    <label for="device-select">Input source</label>
+    <select id="device-select">
+      <option value="">Loading devices...</option>
+    </select>
+    <button class="refresh-btn" onclick="loadDevices()">Refresh devices</button>
+    <button class="refresh-btn" id="monitor-btn" onclick="toggleMonitor()" style="margin-left:8px">Test Mic</button>
+    <div id="error-msg" class="error-msg"></div>
+
+    <div class="meter-container" id="meter-container" style="display:none">
+      <div class="meter-label">
+        <span>Audio Level</span>
+        <span class="clip-indicator" id="clip-indicator">CLIPPING</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill" id="meter-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Client Languages</h2>
+      <button class="collapse-btn" id="lang-toggle" onclick="toggleLangSection()">Hide</button>
+    </div>
+    <div id="lang-section">
+      <input type="text" class="lang-search" id="lang-search" placeholder="Search languages...">
+      <ul class="lang-list" id="lang-list"></ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toggle-container">
+      <div>
+        <div class="toggle-label">Captioning</div>
+        <div id="toggle-status" class="toggle-status">Off</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="capture-toggle" onchange="toggleCapture()" disabled>
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="info-row">
+      <span class="info-label">Connected clients</span>
+      <span class="info-value" id="client-count">0</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Selected device</span>
+      <span class="info-value" id="device-name">None</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Server hostname</span>
+      <span class="info-value mono" id="server-hostname">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Server IP</span>
+      <span class="info-value mono" id="server-ip">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Languages enabled</span>
+      <span class="info-value" id="lang-count">—</span>
+    </div>
+  </div>
+</div>
+
+<script src="/static/qrcode.min.js"></script>
+<script>
+// ============================================================================
+// THEME TOGGLE (matches client page)
+// ============================================================================
+let theme = localStorage.getItem('openear-admin-theme') || 'dark';
+applyTheme(theme);
+
+function applyTheme(t) {
+  theme = t;
+  const iconDark = document.getElementById('theme-icon-dark');
+  const iconLight = document.getElementById('theme-icon-light');
+  if (t === 'light') {
+    document.documentElement.classList.add('light');
+    iconDark.style.display = 'none';
+    iconLight.style.display = '';
+  } else {
+    document.documentElement.classList.remove('light');
+    iconDark.style.display = '';
+    iconLight.style.display = 'none';
+  }
+  localStorage.setItem('openear-admin-theme', t);
+}
+
+function toggleTheme() {
+  applyTheme(theme === 'dark' ? 'light' : 'dark');
+}
+
+// ============================================================================
+// SECTION TOGGLES
+// ============================================================================
+function toggleLangSection() {
+  const section = document.getElementById('lang-section');
+  const btn = document.getElementById('lang-toggle');
+  const hidden = section.style.display === 'none';
+  section.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
+
+const deviceSelect = document.getElementById('device-select');
+const captureToggle = document.getElementById('capture-toggle');
+const toggleStatus = document.getElementById('toggle-status');
+const clientCount = document.getElementById('client-count');
+const deviceName = document.getElementById('device-name');
+const errorMsg = document.getElementById('error-msg');
+const serverDown = document.getElementById('server-down');
+const meterContainer = document.getElementById('meter-container');
+const meterFill = document.getElementById('meter-fill');
+const clipIndicator = document.getElementById('clip-indicator');
+const serverHostname = document.getElementById('server-hostname');
+const serverIP = document.getElementById('server-ip');
+const qrUrlEl = document.getElementById('qr-url');
+const qrCodeEl = document.getElementById('qr-code');
+const monitorBtn = document.getElementById('monitor-btn');
+
+let isMonitoring = false;
+
+async function toggleMonitor() {
+  const deviceId = parseInt(deviceSelect.value);
+  if (!isMonitoring) {
+    if (isNaN(deviceId)) { showError('Select an audio device first'); return; }
+    try {
+      const res = await fetch('/api/monitor/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId }),
+      });
+      const data = await res.json();
+      if (data.error) { showError(data.error); return; }
+      isMonitoring = true;
+      monitorBtn.textContent = 'Stop Test';
+      monitorBtn.style.color = 'var(--success)';
+      meterContainer.style.display = 'block';
+    } catch (e) { showError('Failed to start monitor'); }
+  } else {
+    try {
+      await fetch('/api/monitor/stop', { method: 'POST' });
+    } catch (e) {}
+    isMonitoring = false;
+    monitorBtn.textContent = 'Test Mic';
+    monitorBtn.style.color = '';
+    meterContainer.style.display = 'none';
+    meterFill.style.width = '0%';
+  }
+}
+
+let devices = [];
+let qrGenerated = false;
+
+function toggleQR() {
+  const section = document.getElementById('qr-section');
+  const btn = document.getElementById('qr-toggle');
+  const hidden = section.style.display === 'none';
+  section.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
+
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.style.display = 'block';
+  setTimeout(() => { errorMsg.style.display = 'none'; }, 5000);
+}
+
+async function loadServerInfo() {
+  try {
+    const res = await fetch('/api/server-info');
+    const data = await res.json();
+    serverHostname.textContent = data.hostname;
+    serverIP.textContent = data.ip;
+    qrUrlEl.textContent = data.url;
+
+    if (!qrGenerated) {
+      new QRCode(qrCodeEl, {
+        text: data.url,
+        width: 200,
+        height: 200,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+      qrGenerated = true;
+    }
+  } catch (e) {
+    // Will retry
+  }
+}
+
+async function loadDevices() {
+  try {
+    const res = await fetch('/api/devices');
+    const data = await res.json();
+    devices = data.devices;
+
+    deviceSelect.innerHTML = '';
+    if (devices.length === 0) {
+      deviceSelect.innerHTML = '<option value="">No input devices found</option>';
+      return;
+    }
+
+    devices.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.name;
+      deviceSelect.appendChild(opt);
+    });
+
+    captureToggle.disabled = false;
+  } catch (e) {
+    showError('Failed to load audio devices');
+  }
+}
+
+async function toggleCapture() {
+  const checked = captureToggle.checked;
+
+  if (checked) {
+    const deviceId = parseInt(deviceSelect.value);
+    if (isNaN(deviceId)) {
+      showError('Select an audio device first');
+      captureToggle.checked = false;
+      return;
+    }
+
+    try {
+      captureToggle.disabled = true;
+      const res = await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showError(data.error);
+        captureToggle.checked = false;
+      }
+    } catch (e) {
+      showError('Failed to start capture');
+      captureToggle.checked = false;
+    } finally {
+      captureToggle.disabled = false;
+    }
+  } else {
+    try {
+      captureToggle.disabled = true;
+      await fetch('/api/stop', { method: 'POST' });
+    } catch (e) {
+      showError('Failed to stop capture');
+    } finally {
+      captureToggle.disabled = false;
+    }
+  }
+
+  updateStatus();
+}
+
+async function updateStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    serverDown.classList.remove('visible');
+
+    captureToggle.checked = data.capturing;
+    toggleStatus.textContent = data.capturing ? 'Live' : 'Off';
+    toggleStatus.className = 'toggle-status' + (data.capturing ? ' active' : '');
+    clientCount.textContent = data.clients;
+
+    if (data.device_id !== null && devices.length > 0) {
+      const dev = devices.find(d => d.id === data.device_id);
+      deviceName.textContent = dev ? dev.name : 'Device ' + data.device_id;
+      deviceSelect.value = data.device_id;
+    } else {
+      deviceName.textContent = 'None';
+    }
+
+    // Audio level meter — show when capturing or monitoring
+    if (data.capturing || data.monitoring) {
+      meterContainer.style.display = 'block';
+      const pct = Math.round(data.audio_level * 100);
+      meterFill.style.width = pct + '%';
+      meterFill.className = 'meter-fill' + (pct > 85 ? ' hot' : pct > 60 ? ' warm' : '');
+      clipIndicator.className = 'clip-indicator' + (data.clipping ? ' active' : '');
+    } else if (!isMonitoring) {
+      meterContainer.style.display = 'none';
+    }
+
+    // Test Mic button — hide while capturing (meter is already live from capture)
+    monitorBtn.style.display = data.capturing ? 'none' : '';
+
+    // Sync local monitor state with server (e.g. if server restarted)
+    if (!data.monitoring && isMonitoring) {
+      isMonitoring = false;
+      monitorBtn.textContent = 'Test Mic';
+      monitorBtn.style.color = '';
+    }
+  } catch (e) {
+    serverDown.classList.add('visible');
+    toggleStatus.textContent = 'Unknown';
+    toggleStatus.className = 'toggle-status';
+    clientCount.textContent = '—';
+  }
+}
+
+// ============================================================================
+// LANGUAGE MANAGEMENT
+// ============================================================================
+
+const langCount = document.getElementById('lang-count');
+const langList = document.getElementById('lang-list');
+const langSearch = document.getElementById('lang-search');
+
+let allLanguages = [];
+let enabledSet = new Set();
+
+async function loadLanguages() {
+  try {
+    const res = await fetch('/api/languages');
+    const data = await res.json();
+    allLanguages = data.installed || [];
+    enabledSet = new Set(data.enabled || ['en']);
+    renderLanguages();
+  } catch (e) {
+    langCount.textContent = 'Error';
+  }
+}
+
+function renderLanguages() {
+  const filter = langSearch.value.toLowerCase();
+  langList.innerHTML = '';
+
+  // English first, always
+  const english = {code: 'en', name: 'English'};
+  const filtered = allLanguages.filter(l => l.name.toLowerCase().includes(filter));
+
+  // Build English row (always on, locked)
+  if ('english'.includes(filter)) {
+    const li = document.createElement('li');
+    li.className = 'lang-item';
+    li.innerHTML = `<span class="lang-name disabled">English (always on)</span>
+      <label class="lang-switch"><input type="checkbox" checked disabled><span class="lang-slider"></span></label>`;
+    langList.appendChild(li);
+  }
+
+  filtered.forEach(lang => {
+    const li = document.createElement('li');
+    li.className = 'lang-item';
+    const checked = enabledSet.has(lang.code);
+    li.innerHTML = `<span class="lang-name">${lang.name}</span>
+      <label class="lang-switch"><input type="checkbox" ${checked ? 'checked' : ''} data-code="${lang.code}"><span class="lang-slider"></span></label>`;
+    li.querySelector('input').addEventListener('change', (e) => toggleLang(lang.code, e.target.checked));
+    langList.appendChild(li);
+  });
+
+  langCount.textContent = enabledSet.size;
+}
+
+async function toggleLang(code, enable) {
+  const endpoint = enable ? '/api/languages/enable' : '/api/languages/disable';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code}),
+    });
+    const data = await res.json();
+    if (data.enabled) {
+      enabledSet = new Set(data.enabled);
+      langCount.textContent = enabledSet.size;
+    }
+  } catch (e) {
+    // Revert checkbox on error
+    loadLanguages();
+  }
+}
+
+langSearch.addEventListener('input', renderLanguages);
+
+// Init
+loadServerInfo();
+loadLanguages();
+loadDevices().then(() => updateStatus());
+setInterval(updateStatus, 500);
+</script>
+</body>
+</html>
