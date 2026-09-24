@@ -246,6 +246,12 @@ models/
 rules_project.md
 STATE.md
 
+# The -history siblings of every private doc. These carry the same content the live
+# files do, including third parties' names and his words, and they are the files a
+# doczap pass GROWS. STATE.md was ignored and STATE-history.md was not, which is one
+# `git add -A` from the leak that cost this repo its history (rules.md 9.2).
+*-history.md
+
 # The walkable list of what OpenEar must always be true about.
 # Jonathan's items; private like the two above until he says otherwise.
 core_principles.md
