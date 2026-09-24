@@ -257,3 +257,8 @@ STATE.md
 core_principles.md
 # The bug tracker is private: kept on disk, never in the repo
 /docs/bugs.json
+
+# The public key authorized for passwordless admin SSH by `setup.bat --remote`.
+# Per-machine and never shipped: an installer that carries a maintainer's key
+# grants that maintainer admin login to everyone who runs it.
+ssh_authorized_key.txt

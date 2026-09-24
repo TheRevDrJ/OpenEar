@@ -320,10 +320,22 @@ echo   [OK] PowerShell set as default SSH shell
 
 :: Install SSH public key for passwordless login
 :: For admin accounts, Windows SSH uses C:\ProgramData\ssh\administrators_authorized_keys
-:: Permissions must be restricted to SYSTEM and Administrators only or SSH ignores the file
-echo   Installing SSH public key for passwordless login...
-powershell -Command "$key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGJ2EP6Jqif8ZHnkkixr4R3x7eGo09/jsFIkfbQ8Wpvo jonathan@Enterprise'; $f = 'C:\ProgramData\ssh\administrators_authorized_keys'; Set-Content -Path $f -Value $key -Encoding UTF8; $acl = Get-Acl $f; $acl.SetAccessRuleProtection($true, $false); $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) }; $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('SYSTEM','FullControl','Allow'))); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('Administrators','FullControl','Allow'))); Set-Acl $f $acl" >nul 2>&1
-echo   [OK] SSH key installed — passwordless login enabled for jonathan@Enterprise
+:: and ignores the file unless its ACL is locked down, which install_ssh_key.ps1 does.
+::
+:: THE KEY IS NOT IN THIS FILE. It is read from ssh_authorized_key.txt beside this
+:: script, which is gitignored. A public installer carrying a maintainer's key grants
+:: that maintainer administrator login on every machine that runs it, and the person
+:: opting in has no way to know whose key it is. Put your OWN public key there.
+set "KEYFILE=%SCRIPT_DIR%ssh_authorized_key.txt"
+if exist "%KEYFILE%" goto install_ssh_key
+echo   [SKIP] No ssh_authorized_key.txt found, so no SSH key was authorized.
+echo          For passwordless login, put your own public key in:
+echo            %KEYFILE%
+goto ssh_key_done
+:install_ssh_key
+echo   Authorizing SSH public key from ssh_authorized_key.txt...
+powershell -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install_ssh_key.ps1" -KeyFile "%KEYFILE%"
+:ssh_key_done
 
 :: SSH firewall rule
 netsh advfirewall firewall show rule name="OpenSSH-Server" >nul 2>&1
