@@ -71,10 +71,11 @@ You also need a local network (church WiFi or a simple $30 router) for clients t
 
 ### Experimental Platforms
 
-**Mac Mini M4 (in testing):**
-- Base model M4 Mac Mini (16GB unified memory, $599)
-- Transcription runs on CPU via Parakeet — translation limited without NVIDIA GPU
-- Status: v0.6 — actively being tested
+**macOS on Apple Silicon — in development, not currently supported:**
+- Captioning is expected to run: Parakeet is CPU-only on every platform and uses no graphics card at any point.
+- Translation does not run. NLLB-200 needs CUDA, and Apple Silicon does not provide it — a different translation engine would be required.
+- The Windows setup and launcher scripts have no macOS equivalents yet.
+- Status: v0.6 — in progress
 
 ### Reference Test Server
 
@@ -98,7 +99,7 @@ This is the actual hardware OpenEar is developed and tested on:
 | VRAM in use | ~4.4 GB of 24 GB |
 | Disk space | ~100 GB (includes OS, models, and translation packs) |
 
-*This server is significantly overpowered for OpenEar. The goal is to determine the minimum viable hardware — particularly whether the $599 Mac Mini M4 can deliver acceptable quality.*
+*This server is significantly overpowered for OpenEar. Captioning needs nothing like it — the everyday desktop listed under Hardware Requirements is enough, with no graphics card at all.*
 
 ## Quick Start (Windows)
 
@@ -130,7 +131,7 @@ That's it. The setup script handles everything else.
 | v0.3 | UI polish, quality presets, admin settings | ✓ Done |
 | v0.4 | Real-time translation — any language, any device | ✓ Done |
 | v0.5 | One-click installer | ✓ Done |
-| v0.6 | Mac Mini M4 development **(rejected after cost analysis)** | ✓ Done |
+| v0.6 | Apple Silicon development | ◐ In progress... |
 | v0.7 | Testing at select churches | ◐ In progress... |
 | v0.8 | Expanded testing & feedback | ○ Planned |
 | v0.9 | Public release — manually deployable for any church | ○ Planned |

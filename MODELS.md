@@ -94,7 +94,7 @@ NLLB. Getting that backwards yields fluent output in the wrong language.
 | Model | Why not tested |
 |---|---|
 | Whisper large-v3 / turbo (ASR) | Tested 2026-03 — see `BENCHMARK_REPORT.md`. Lost to Parakeet on punctuation consistency, which directly degrades translation quality downstream. |
-| Apple Silicon / CoreML stack | Not a model question. Killed 2026-07-31 on **cost**, not capability — the $599 Mac mini that justified it was retired; 16 GB now ~$1300. |
+| Apple Silicon / CoreML stack | Not a model question, and **reopened 2026-08-23** — see v0.6 on the roadmap. Set aside 2026-07-31 on the cost of buying a dedicated Mac, which says nothing about a site that already owns one. Captioning needs no change at all: Parakeet is CPU-only. Translation is the open question — NLLB-200 runs through CTranslate2, which needs CUDA, so an alternative engine would have to be measured here first. |
 
 ---
 
