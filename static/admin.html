@@ -798,6 +798,12 @@ async function toggleLang(code, enable) {
       body: JSON.stringify({code}),
     });
     const data = await res.json();
+    if (data.error) {
+      // The server refused: say why, and put the switch back where it really is.
+      showError(data.error);
+      loadLanguages();
+      return;
+    }
     if (data.enabled) {
       enabledSet = new Set(data.enabled);
       langCount.textContent = enabledSet.size;

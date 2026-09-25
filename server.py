@@ -82,7 +82,7 @@ import sounddevice as sd
 import onnx_asr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 # ============================================================================
 # TRANSLATION (NLLB-200 via CTranslate2)
@@ -529,8 +529,10 @@ async def broadcast(message: dict):
                 except Exception:
                     disconnected.add(client)
     else:
-        # Non-transcript messages go to everyone identically
-        for client in connected_clients:
+        # Non-transcript messages go to everyone identically. Iterate a COPY: each
+        # send awaits, and a phone connecting during that await would otherwise
+        # change the set mid-loop and raise.
+        for client in list(connected_clients):
             try:
                 await client.send_json(message)
             except Exception:
@@ -625,10 +627,14 @@ async def transcription_loop():
 # ============================================================================
 
 def start_monitor(device_id: int):
-    """Open an audio stream for level monitoring only — no buffering, no transcription."""
+    """Open an audio stream for level monitoring only — no buffering, no transcription.
+
+    The flag is set only AFTER the stream is running. It used to be set first,
+    so a device that refused to open left /api/status reporting monitoring:true
+    while nothing was listening. Raises if the device cannot be opened.
+    """
     global is_monitoring, monitor_stream
-    is_monitoring = True
-    monitor_stream = sd.InputStream(
+    stream = sd.InputStream(
         device=device_id,
         samplerate=SAMPLE_RATE,
         channels=1,
@@ -636,7 +642,13 @@ def start_monitor(device_id: int):
         callback=monitor_callback,
         blocksize=int(SAMPLE_RATE * 0.1),
     )
-    monitor_stream.start()
+    try:
+        stream.start()
+    except Exception:
+        stream.close()
+        raise
+    monitor_stream = stream
+    is_monitoring = True
     logger.info(f"Audio monitor started on device {device_id}")
 
 
@@ -672,22 +684,31 @@ def start_capture(device_id: int):
     """
     global is_capturing, capture_stream, selected_device_id
 
-    selected_device_id = device_id
-    is_capturing = True
-
     # Clear any stale audio from a previous capture session
     with buffer_lock:
         audio_buffer.clear()
 
-    capture_stream = sd.InputStream(
+    stream = sd.InputStream(
         device=device_id,
-        samplerate=SAMPLE_RATE,   # Resample to 16kHz (what Whisper expects)
+        samplerate=SAMPLE_RATE,   # Resample to 16kHz (what Parakeet expects)
         channels=1,               # Mono capture
         dtype="float32",          # Samples as floats in [-1.0, 1.0]
         callback=audio_callback,  # Called on the audio thread for each block
         blocksize=int(SAMPLE_RATE * 0.1),  # 1600 samples = 100ms blocks
     )
-    capture_stream.start()
+    try:
+        stream.start()
+    except Exception:
+        stream.close()
+        raise
+
+    # The state is claimed only once the stream is really running. It used to be
+    # set before InputStream() — so a device that refused 16 kHz (most 48 kHz-only
+    # USB and Bluetooth mics do) raised, and left /api/status reporting
+    # capturing:true while nothing was being captured at all.
+    capture_stream = stream
+    selected_device_id = device_id
+    is_capturing = True
     logger.info(f"Audio capture started on device {device_id}")
 
 
@@ -715,6 +736,28 @@ def stop_capture():
 # These are called by the admin page (admin.html) to control the server.
 # The client page (index.html) doesn't use REST — it only uses WebSocket.
 
+def api_error(message: str, status: int = 400) -> JSONResponse:
+    """An error response the admin page can actually see.
+
+    These endpoints used to `return {"error": ...}, 400`. FastAPI does not read
+    that tuple as a status code: it serialises it as a JSON ARRAY with HTTP 200,
+    so admin.html's `if (data.error)` checks never fired and every failure was
+    silent. Always return errors through here.
+    """
+    return JSONResponse({"error": message}, status_code=status)
+
+
+def device_error(device_id, e: Exception) -> JSONResponse:
+    """Explain an audio device that would not open, in words an operator can act on."""
+    message = f"Could not open audio device {device_id}: {e}"
+    # The one failure that has cost real time: a 48 kHz-only USB or Bluetooth mic
+    # cannot be opened at 16 kHz. The Windows Sound Mapper resamples for it.
+    if "sample rate" in str(e).lower():
+        message += " — this device will not run at 16 kHz. Choose 'Microsoft Sound Mapper' instead, which converts for it."
+    logger.error(message)
+    return api_error(message)
+
+
 @app.get("/api/devices")
 async def list_devices():
     """Return a list of available audio input devices for the admin dropdown."""
@@ -732,17 +775,25 @@ async def api_start(body: dict):
 
     device_id = body.get("device_id")
     if device_id is None:
-        return {"error": "device_id required"}, 400
+        return api_error("device_id required")
 
     # Stop monitor mode if active — capture and monitor can't share the same device
     if is_monitoring:
         stop_monitor()
 
     # Stop any existing capture before starting a new one
+    was_capturing = is_capturing
     if is_capturing:
         stop_capture()
 
-    start_capture(device_id)
+    try:
+        start_capture(device_id)
+    except Exception as e:
+        # If this was a device switch, the old capture is already gone — tell the
+        # clients, or they keep showing "live" over a silent server.
+        if was_capturing:
+            await broadcast({"type": "status", "capturing": False})
+        return device_error(device_id, e)
 
     # Launch the transcription loop as an async task running alongside
     # the web server — it will keep running until stop is called
@@ -784,12 +835,15 @@ async def api_monitor_start(body: dict):
     """
     device_id = body.get("device_id")
     if device_id is None:
-        return {"error": "device_id required"}, 400
+        return api_error("device_id required")
     if is_capturing:
-        return {"error": "Cannot monitor while capturing"}, 400
+        return api_error("Cannot monitor while capturing")
     if is_monitoring:
         stop_monitor()
-    start_monitor(device_id)
+    try:
+        start_monitor(device_id)
+    except Exception as e:
+        return device_error(device_id, e)
     return {"status": "monitoring", "device_id": device_id}
 
 
@@ -845,7 +899,7 @@ async def enable_language(body: dict):
     """Enable a language so it appears on client devices."""
     code = body.get("code", "")
     if code not in NLLB_LANG_MAP and code != "en":
-        return {"error": f"Unknown language code: {code}"}, 400
+        return api_error(f"Unknown language code: {code}")
     enabled_languages.add(code)
     save_enabled_languages(enabled_languages)
     return {"enabled": sorted(enabled_languages)}
@@ -855,7 +909,7 @@ async def disable_language(body: dict):
     """Disable a language so it no longer appears on client devices."""
     code = body.get("code", "")
     if code == "en":
-        return {"error": "English cannot be disabled"}, 400
+        return api_error("English cannot be disabled")
     enabled_languages.discard(code)
     save_enabled_languages(enabled_languages)
     return {"enabled": sorted(enabled_languages)}
