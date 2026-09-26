@@ -16,6 +16,81 @@ of the work.
 
 ---
 
+## 0.12.0 — Captions only, or captions plus translation, chosen at setup
+
+Most churches want captions, and until now they could not have captions without the
+translation engine: every start loaded a 3.3-billion-parameter translation model onto
+the graphics card, whether or not anyone ever chose a language. On a PC shared with
+streaming or video software, that model competes for video memory with everything
+else on the card. Translation is now something a church chooses.
+
+- **`setup.bat` asks one question: captions only, or captions plus translation.**
+  Captions only is the default. It never loads the translation model and never touches
+  the graphics card — measured per process on Windows, it uses **0 MB of video memory**,
+  through live transcription, against about 4.6 GB with translation. The answer is kept
+  in `mode.json` and read at every start; run `setup.bat` again to change it.
+  `setup.bat --captions-only` and `setup.bat --translation` answer without asking.
+- **`setup.bat` no longer needs an NVIDIA card.** It used to warn that the system would
+  be unstable without NVIDIA drivers and cancel unless you typed `y`, so "no graphics
+  card needed" was not true of the installer. Captions only never asks about graphics
+  cards. Choosing translation on a PC without an NVIDIA card is refused before anything
+  is installed, with the reason. Captions only also skips the translation model, a 13 GB
+  download.
+- **English captions no longer wait for the end of the sentence.** Each phrase goes to
+  English readers the moment it is transcribed, ahead of any translation. English used
+  to be held until a later phrase supplied a period — translation needs whole sentences,
+  so English readers paid translation's wait without using it, and a phrase cut off
+  before a hymn or a prayer could fail to appear at all. Translated captions still arrive
+  a sentence at a time. The 5-to-10-second phrase is unchanged: it is what makes the
+  captions accurate.
+- **The speech model is pinned to the processor.** It always ran there, but only because
+  two GPU providers failed to load first and printed a page of errors at every start; a
+  PC that happened to have their libraries would have moved speech onto the graphics card
+  without a word. The errors are gone, and the speech model loads in about 3 seconds
+  instead of 7.
+- **The admin page shows the mode.** When translation is not running it says why — this
+  PC is captions only, or translation could not start and here is the error — and locks
+  the language switches instead of offering languages that would arrive in English.
+- **Phones are only offered languages they will actually receive.** A language saved on a
+  phone from an earlier visit that is no longer offered now falls back to English on the
+  server as well as on the phone. The language menu hides itself when English is the only
+  choice.
+- **`openear.bat start --captions-only` or `--translation`** overrides the recorded mode
+  for one run. Unknown flags are refused instead of silently ignored, and `restart` now
+  passes its flags on — it used to drop them.
+
+**Upgrading:** an install from before this release has no recorded mode, so it starts as
+**captions only**. If you use translation, run `setup.bat` once and choose translation,
+or run `setup.bat --translation`. Your enabled languages are kept.
+
+Also fixed:
+
+- The admin API returned its errors with HTTP 200, so the admin page never showed a
+  single one. A capture device that cannot run at 16 kHz is now explained, with the
+  workaround, and the server no longer reports capturing when the device failed to open.
+- `openear.bat` printed the admin address as `/admin.html`, which does not exist. It is
+  `/admin`.
+- `setup.bat` checked `%errorlevel%` inside blocks, where cmd expands it before the
+  command runs, so the virtual-environment and remote-tools failure checks could never
+  fire.
+- `SETUP.txt` said English captions have "zero added latency". It now explains the delay
+  and why it is there — and a tip for the first sentence of a service.
+- The documents gave the translation model's download as 3 GB or 5.5 GB. It is **13 GB** — it is
+  stored at full precision and made smaller only when loaded. The setup guide, the README
+  and setup's own messages now give the real sizes: about 2.5 GB for captions only, about
+  16 GB with translation.
+- An interrupted translation download left a folder that was trusted forever, and the
+  failure was blamed on the graphics driver. The server now checks the model's files, not
+  just its folder. When translation cannot start, the reason names the actual cause — no
+  NVIDIA card, a full graphics card, or missing files.
+- **The server no longer downloads the translation model at startup.** It used to, if the
+  model was missing — before opening its port, so captions stayed down for the whole 13 GB
+  download, the start command gave up after three minutes, and starting again killed the
+  download halfway. Captions now start at once, the admin page says the model is missing,
+  and `setup.bat` (which resumes an interrupted download) is where it is fetched.
+- Removed `download_model.py`, a leftover Whisper downloader that nothing called and that
+  could not run.
+
 ## 0.11.1 — Tracker ids name the type, not the project, and the ship gate is a boolean
 
 The tracker shipped yesterday used a project prefix and a four-value severity scale.

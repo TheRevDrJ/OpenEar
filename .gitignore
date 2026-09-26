@@ -217,6 +217,11 @@ openear.log.*
 # Machine-specific and meaningless anywhere else.
 openear.pid
 
+# This machine's mode: captions only, or captions plus translation. Written by
+# setup.bat and read at every server start (openear_config.py). Per-machine —
+# committing it would push one PC's choice onto every other install.
+mode.json
+
 # Development/test tools (not for release)
 test/
 BENCHMARK_REPORT.md
@@ -235,7 +240,8 @@ DEMO.md
 .DS_Store
 **/.DS_Store
 
-# Downloaded model weights — ~12GB, fetched at setup time by download_model.py.
+# Downloaded model weights — the translation model, ~13GB, fetched at setup time by
+# download_models.py on translation installs only.
 # Never committed; setup re-downloads them. Dropbox backs them up regardless
 # of this rule, so nothing here is at risk of being lost.
 models/

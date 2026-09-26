@@ -16,18 +16,59 @@ set "LOG_FILE=%SCRIPT_DIR%openear.log"
 set "VENV_PYTHON=%SCRIPT_DIR%venv\Scripts\python.exe"
 set "VENV_PYTHONW=%SCRIPT_DIR%venv\Scripts\pythonw.exe"
 
-if "%~1"=="" goto help
-if /i "%~1"=="start" goto start
-if /i "%~1"=="stop" goto stop
-if /i "%~1"=="restart" goto restart
-if /i "%~1"=="status" goto status
-if /i "%~1"=="verbose" goto verbose
-if /i "%~1"=="log" goto log
-if /i "%~1"=="devices" goto devices
-if /i "%~1"=="version" goto version
-if /i "%~1"=="help" goto help
-if /i "%~1"=="--help" goto help
-if /i "%~1"=="-h" goto help
+:: ----------------------------------------------------------------------------
+:: The command, then any flags. Flags are collected into PASS_ARGS and handed to
+:: server.py by start, restart and verbose.
+::
+:: Only KNOWN flags are accepted. The server ignores anything it does not
+:: recognise, so a mistyped flag used to vanish silently and the server started
+:: in whatever mode nobody asked for. Here it stops with a message instead.
+::
+:: Collected once, up front, because restart reaches :start through `call`, and a
+:: called label sees the call's arguments, not the command line's: restart used
+:: to drop every flag it was given.
+::
+:: Each flag is passed on in its CANONICAL spelling, not as typed. The match here
+:: ignores case but the server's does not, so forwarding "--Captions-Only" as typed
+:: got it past this check and then ignored downstream - the exact failure above.
+:: ----------------------------------------------------------------------------
+set "CMD=%~1"
+set "PASS_ARGS="
+set "MODE_CHECKED="
+:collect_args
+shift
+if "%~1"=="" goto args_done
+if /i "%~1"=="--log-text" goto arg_log_text
+if /i "%~1"=="--captions-only" goto arg_captions
+if /i "%~1"=="--translation" goto arg_translation
+echo.
+echo   Unknown option: %~1
+echo   Run 'openear help' to see the options.
+echo.
+exit /b 2
+:arg_log_text
+set "PASS_ARGS=!PASS_ARGS! --log-text"
+goto collect_args
+:arg_captions
+set "PASS_ARGS=!PASS_ARGS! --captions-only"
+goto collect_args
+:arg_translation
+set "PASS_ARGS=!PASS_ARGS! --translation"
+goto collect_args
+:args_done
+
+if "%CMD%"=="" goto help
+if /i "%CMD%"=="start" goto start
+if /i "%CMD%"=="stop" goto stop
+if /i "%CMD%"=="restart" goto restart
+if /i "%CMD%"=="status" goto status
+if /i "%CMD%"=="verbose" goto verbose
+if /i "%CMD%"=="log" goto log
+if /i "%CMD%"=="devices" goto devices
+if /i "%CMD%"=="version" goto version
+if /i "%CMD%"=="help" goto help
+if /i "%CMD%"=="--help" goto help
+if /i "%CMD%"=="-h" goto help
 goto help
 
 :: ============================================================================
@@ -41,14 +82,17 @@ if defined RUNNING_PID (
     exit /b 0
 )
 
+call :check_mode
+if errorlevel 1 exit /b 2
+
 :: Clean up any stale OpenEar (server.py) pythonw before starting
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%kill_openear.ps1" -Quiet > nul 2>&1
 ping 127.0.0.1 -n 2 > nul
 
 echo Starting OpenEar...
-start "" /b "%VENV_PYTHONW%" "%SERVER_SCRIPT%" %~2 > nul 2>&1
+start "" /b "%VENV_PYTHONW%" "%SERVER_SCRIPT%" !PASS_ARGS! > nul 2>&1
 
-:: Poll for port 80 - check every 3 seconds, timeout after 90 seconds
+:: Poll for port 80 - check every 3 seconds, timeout after 180 seconds
 set /a ELAPSED=0
 echo   Loading models...
 :start_wait
@@ -66,7 +110,7 @@ echo !RUNNING_PID! > "%PID_FILE%"
 echo.
 echo   OpenEar is running ^(PID: !RUNNING_PID!^) - started in !ELAPSED!s
 echo.
-echo   Admin:  http://localhost/admin.html
+echo   Admin:  http://localhost/admin
 echo   Client: http://localhost
 echo   Log:    %LOG_FILE%
 echo.
@@ -115,12 +159,17 @@ exit /b 0
 
 :: ============================================================================
 :restart
-::   Stop then start.
+::   Stop then start. The mode is checked FIRST: restart used to stop a running
+::   server and only then find its flags refused, leaving nothing running and
+::   reporting success. And :start's exit code is passed on - a failed start
+::   used to come back as 0.
 :: ============================================================================
+call :check_mode
+if errorlevel 1 exit /b 2
 call :stop
 echo.
 call :start
-exit /b 0
+exit /b !errorlevel!
 
 :: ============================================================================
 :status
@@ -131,7 +180,7 @@ if defined RUNNING_PID (
     echo.
     echo   OpenEar is RUNNING ^(PID: !RUNNING_PID!^)
     echo.
-    echo   Admin:  http://localhost/admin.html
+    echo   Admin:  http://localhost/admin
     echo   Client: http://localhost
     echo   Log:    %LOG_FILE%
     echo.
@@ -160,7 +209,9 @@ echo   Starting OpenEar in verbose mode...
 echo   Logs will appear below. Press Ctrl+C to stop.
 echo   ================================================
 echo.
-"%VENV_PYTHON%" "%SERVER_SCRIPT%" %~2
+call :check_mode
+if errorlevel 1 exit /b 2
+"%VENV_PYTHON%" "%SERVER_SCRIPT%" !PASS_ARGS!
 exit /b 0
 
 :: ============================================================================
@@ -204,6 +255,18 @@ exit /b 0
 exit /b 0
 
 :: ============================================================================
+:check_mode
+::   Prints the mode a start with these flags will use, by the same rules the
+::   server applies (openear_config.py), and fails on --captions-only together
+::   with --translation. Checked once per command, before anything is stopped.
+:: ============================================================================
+if "!MODE_CHECKED!"=="1" exit /b 0
+"%VENV_PYTHON%" "%SCRIPT_DIR%openear_config.py" !PASS_ARGS!
+if errorlevel 1 exit /b 2
+set "MODE_CHECKED=1"
+exit /b 0
+
+:: ============================================================================
 :find_pid
 ::   Finds the PID of whatever is listening on port 80.
 ::   Sets RUNNING_PID if found, clears it if not.
@@ -221,7 +284,7 @@ echo.
 echo   OpenEar Server Manager
 echo   ======================
 echo.
-echo   Usage: openear [command]
+echo   Usage: openear [command] [flags]
 echo.
 echo   Commands:
 echo     start      Start the server in the background ^(headless^)
@@ -234,9 +297,13 @@ echo     devices    List available audio input devices
 echo     version    Show the OpenEar version
 echo     help       Show this help message
 echo.
-echo   Flags:
-echo     --log-text   Log transcription and translation text to text-logs/
-echo                  Add to start or verbose: openear verbose --log-text
+echo   Flags ^(after start, restart or verbose^):
+echo     --log-text        Log transcription and translation text to text-logs/
+echo     --captions-only   This run only: captions, no translation model loaded
+echo     --translation     This run only: captions plus translation
+echo.
+echo   This machine's normal mode - captions only, or captions plus
+echo   translation - is chosen by setup.bat. Run setup.bat again to change it.
 echo.
 echo   Examples:
 echo     openear start       Launch headless, ready for clients

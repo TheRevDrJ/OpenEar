@@ -18,22 +18,33 @@ Architecture:
   2. Audio arrives in ~100ms blocks via a callback into a thread-safe buffer.
   3. transcription_loop() cuts on VOICE ACTIVITY, not a fixed interval: it
      accumulates at least MIN_CHUNK_DURATION (5s), then cuts at the next trailing
-     silence, hard-capping at MAX_CHUNK_DURATION (10s). That floor is why there
-     is a ~5-7s delay between speech and caption, and it is deliberate — the
-     recogniser needs a complete phrase to be accurate and to punctuate.
-  4. **NVIDIA Parakeet** (onnx_asr) transcribes. Not Whisper. It is chosen for
-     punctuation consistency, which the translator depends on downstream.
-  5. broadcast() buffers fragments until a sentence ends, then translates that
-     whole sentence per connected client with **NLLB-200 3.3B** (CTranslate2,
-     int8, CUDA) and pushes it over WebSocket. Both sides of the text log are
-     stamped with a shared segment id so quality scoring pairs them exactly.
+     silence, hard-capping at MAX_CHUNK_DURATION (10s). That window is the delay
+     between speech and caption, and it is deliberate — the recogniser needs a
+     complete phrase to be accurate and to punctuate. Measured in a real
+     sanctuary: median chunk 7.7s, and 39% run to the 10s cap because preaching
+     rarely pauses for half a second. The first word of a chunk waits the whole
+     chunk; the last waits almost none.
+  4. **NVIDIA Parakeet** (onnx_asr) transcribes, on the CPU. Not Whisper. It is
+     chosen for punctuation consistency, which the translator depends on.
+  5. broadcast() sends each transcribed chunk to English clients the moment it
+     exists. Separately, it buffers the text until a sentence ends and — only
+     for clients who chose another language — translates that whole sentence
+     with **NLLB-200 3.3B** (CTranslate2, int8, CUDA). Both sides of the text
+     log are stamped with a shared segment id so quality scoring pairs them.
   6. Clients are display-only. All capture happens server-side.
 
-  admin.html  — capture start/stop, device selection, languages (REST).
+TWO MODES, chosen per machine by setup.bat and read from mode.json at startup
+(openear_config.py holds the rules and the reasons):
+  captions      Parakeet only. The translation model is never imported or
+                loaded, so the process takes no video memory at all.
+  translation   Parakeet plus NLLB-200 on the GPU (about 4.6 GB).
+A launch flag, --captions-only or --translation, overrides the file for one run.
+
+  admin.html  — capture start/stop, device selection, languages, mode (REST).
   index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.11.2"
+VERSION = "0.12.0"
 
 import os
 import sys
@@ -55,9 +66,9 @@ from pathlib import Path
 # When Python is installed from the Microsoft Store, it runs in a sandboxed
 # environment that can't find CUDA DLLs installed via pip (nvidia-cublas-cu12,
 # nvidia-cudnn-cu12). We manually tell Windows where those DLLs live so that
-# faster-whisper can load the GPU acceleration libraries.
-# If the nvidia packages aren't installed (e.g., CPU-only setup), these blocks
-# silently do nothing.
+# CTranslate2 can load them for translation. Only the translation model uses
+# them; captions run on the CPU.
+# If the nvidia packages aren't installed, these blocks silently do nothing.
 
 try:
     import nvidia.cublas
@@ -84,17 +95,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-# ============================================================================
-# TRANSLATION (NLLB-200 via CTranslate2)
-# ============================================================================
-# Meta's NLLB-200 (No Language Left Behind) provides high-quality offline
-# translation across 200 languages. We use the 3.3B parameter model quantized
-# to INT8 via CTranslate2, which uses ~3GB VRAM on GPU or runs on CPU.
-# This is the same CTranslate2 engine that powers faster-whisper, so no new
-# runtime dependencies are needed.
+import openear_config
 
-import ctranslate2
-import sentencepiece as spm
+# ctranslate2 and sentencepiece (the translation stack) are imported ONLY inside
+# load_translation_model(), and only in translation mode. A captions-only server
+# never imports them, so it needs no CUDA libraries to start.
 
 # ============================================================================
 # CONFIGURATION
@@ -107,9 +112,9 @@ TEXT_LOG_DIR = Path(__file__).parent / "text-logs"
 if LOG_TEXT:
     TEXT_LOG_DIR.mkdir(exist_ok=True)
 
-ASR_MODEL = "nemo-parakeet-tdt-0.6b-v2"  # NVIDIA Parakeet — natively punctuated output
+ASR_MODEL = openear_config.PARAKEET_MODEL  # NVIDIA Parakeet — natively punctuated output
 PORT = 80                   # Default HTTP port — no :port needed in URLs
-SAMPLE_RATE = 16000         # 16kHz — what Whisper expects. Audio is resampled to this.
+SAMPLE_RATE = 16000         # 16kHz — what Parakeet expects. Audio is resampled to this.
 MIN_CHUNK_DURATION = 5      # Don't cut before 5s — too little context for Parakeet.
 MAX_CHUNK_DURATION = 10     # Hard cap — always cut here even mid-speech.
                             # WER tested at fixed intervals: 3s=14.4%, 5s=4.1%, 10s=3.0%.
@@ -140,17 +145,46 @@ _file.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", da
 logger.addHandler(_file)
 
 # ============================================================================
-# FASTAPI APP & WHISPER MODEL
+# MODE — captions only, or captions + translation
+# ============================================================================
+# Resolved once, here, before any model loads, because it decides which models
+# load. The rules (flag beats file, absent file means captions) live in
+# openear_config.py so the downloader and the launcher apply the same ones.
+
+try:
+    MODE, MODE_SOURCE = openear_config.resolve_mode(sys.argv[1:])
+except openear_config.ModeError as e:
+    logger.error(f"Cannot start: {e}")
+    sys.exit(2)
+
+TRANSLATION_MODE = MODE == openear_config.TRANSLATION
+
+# When this process started. The admin page watches it to notice a restart even
+# when the mode did not change - a restart can still change WHY translation is off.
+SERVER_STARTED = int(time.time())
+logger.info(f"OpenEar v{VERSION} starting - mode: {openear_config.describe(MODE)} (from {MODE_SOURCE})")
+
+# ============================================================================
+# FASTAPI APP & SPEECH MODEL
 # ============================================================================
 
 app = FastAPI(title="OpenEar")
 
-# Load the Parakeet ASR model at startup. Runs on CPU — fast enough for real-time
-# transcription and frees up GPU VRAM entirely for the translation model.
+# Load the Parakeet ASR model at startup, ON THE CPU — pinned, not left to chance.
+# It is fast enough there to need no graphics card (measured on an i7-12700K: 8s
+# of audio in 0.37s, about 22x real time), and a captions-only machine takes no
+# video memory.
+#
+# The pin is load-bearing. onnxruntime-gpu advertises TensorRT and CUDA ahead of
+# the CPU, and onnx_asr tries them in that order. Parakeet only ever landed on
+# the CPU because both GPU providers FAILED to load (a missing nvinfer / cufft
+# DLL) — printing a wall of errors at every start. Any machine that happened to
+# have those DLLs would have put speech on the GPU without a word, and "captions
+# only uses no video memory" would have quietly stopped being true.
 # On first run, it downloads ~2.5GB of model weights from HuggingFace.
-logger.info(f"Loading Parakeet ASR model (first run downloads ~2.5GB)...")
+logger.info("Loading Parakeet ASR model on the CPU (first run downloads ~2.5GB)...")
 t0 = time.time()
-asr_model = onnx_asr.load_model(ASR_MODEL)
+asr_model = onnx_asr.load_model(ASR_MODEL, providers=["CPUExecutionProvider"])
 logger.info(f"ASR model loaded in {time.time() - t0:.1f}s")
 
 # ============================================================================
@@ -201,29 +235,129 @@ NLLB_LANG_MAP = {
     "zu": ("zul_Latn", "Zulu"),
 }
 
-NLLB_MODEL_DIR = str(Path(__file__).parent / "models" / "nllb-3.3b-ct2")
+NLLB_MODEL_DIR = str(openear_config.NLLB_MODEL_DIR)
 
-# Load NLLB translation model — auto-download if missing
-logger.info("Loading NLLB-200 translation model...")
-t0 = time.time()
-try:
-    if not Path(NLLB_MODEL_DIR).exists():
-        logger.info("NLLB model not found — downloading now (~3GB, one-time)...")
-        from huggingface_hub import snapshot_download
-        snapshot_download("entai2965/nllb-200-3.3B-ctranslate2", local_dir=NLLB_MODEL_DIR)
-        logger.info(f"NLLB model downloaded in {time.time() - t0:.1f}s")
-    nllb_translator = ctranslate2.Translator(
-        NLLB_MODEL_DIR,
-        device="cuda",
-        compute_type="int8",
+nllb_translator = None
+nllb_sp = None
+
+# Why translation is not running, in a sentence an operator can act on — or None
+# when it is running. The admin page shows this verbatim, so it must never claim
+# translation works when it does not: that is the difference between a machine
+# that lost translation and says so, and one that serves English to a Spanish
+# reader while the language list still offers Spanish.
+translation_unavailable_reason: str | None = None
+
+
+def load_translation_model():
+    """Load NLLB-200 onto the GPU. Called once at startup, in translation mode only.
+
+    Never raises. On any failure translation stays off and
+    translation_unavailable_reason says why; the server still starts and
+    captions still work.
+    """
+    global nllb_translator, nllb_sp, translation_unavailable_reason
+
+    logger.info("Loading NLLB-200 translation model...")
+    t0 = time.time()
+    try:
+        import ctranslate2
+        import sentencepiece as spm
+
+        # Check the FILES, not just the folder: an interrupted download leaves the
+        # folder in place with model.bin missing, and a folder check trusts it.
+        #
+        # ⛔ AND NEVER DOWNLOAD HERE. This runs before the server opens port 80, so
+        # fetching the 13 GB model at startup keeps CAPTIONS down for the whole
+        # download - openear.bat gives up after three minutes, and starting again
+        # kills the process mid-download. Captions must always come up fast; a
+        # missing model is reported at once, and setup.bat (which resumes an
+        # interrupted download) is where it gets fetched.
+        missing = [f for f in NLLB_REQUIRED_FILES if not (Path(NLLB_MODEL_DIR) / f).is_file()]
+        if missing:
+            raise FileNotFoundError(f"translation model files missing: {', '.join(missing)}")
+        # Present is not complete: a copy cut short, or a disk that filled, leaves a
+        # short model.bin that CTranslate2 rejects with an error naming neither
+        # cause. Its size is pinned with the revision, so it can be checked here.
+        size = (Path(NLLB_MODEL_DIR) / "model.bin").stat().st_size
+        if size != openear_config.NLLB_MODEL_BIN_BYTES:
+            raise FileNotFoundError(
+                f"translation model file incomplete: model.bin is {size:,} bytes, "
+                f"expected {openear_config.NLLB_MODEL_BIN_BYTES:,}")
+
+        nllb_translator = ctranslate2.Translator(
+            NLLB_MODEL_DIR,
+            device="cuda",
+            compute_type="int8",
+        )
+        nllb_sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
+        logger.info(f"NLLB translation model loaded in {time.time() - t0:.1f}s")
+    except Exception as e:
+        nllb_translator = None
+        nllb_sp = None
+        translation_unavailable_reason = f"Captions are running in English. {translation_failure_hint(e)} The error was: {e}"
+        logger.error(f"NLLB translation model unavailable: {e}")
+        logger.error("Translation is OFF for this session. Captions continue in English only.")
+
+
+# The files a usable NLLB-200 CTranslate2 folder must hold. model.bin is 13 GB and
+# the one an interrupted download most often lacks.
+NLLB_REQUIRED_FILES = ("model.bin", "config.json", "shared_vocabulary.json", "sentencepiece.bpe.model")
+
+
+def translation_failure_hint(e: Exception) -> str:
+    """One sentence on what to do about a translation model that would not load.
+
+    Each branch is a failure seen in practice. The fallback does not guess: blaming
+    the driver for a missing file sends an operator to nvidia.com for nothing.
+    """
+    text = str(e).lower()
+    if "out of memory" in text:
+        return ("The graphics card is out of video memory — something else on this PC is "
+                "using it. Translation needs about 4.6 GB free; it works best on a PC of its own.")
+    if any(w in text for w in ("cuda", "cublas", "cudnn", "no cuda-capable", "driver")):
+        return ("Translation needs an NVIDIA graphics card and the full driver from "
+                "nvidia.com — Windows Update's basic driver is not enough.")
+    if isinstance(e, (FileNotFoundError, OSError)) or "no such file" in text or "not found" in text:
+        return ("The translation model's files are missing or incomplete. Run setup.bat "
+                "again with an internet connection to finish downloading them, then "
+                "restart OpenEar.")
+    return "Translation could not start."
+
+
+if TRANSLATION_MODE:
+    load_translation_model()
+elif MODE_SOURCE.endswith("flag"):
+    # A one-run test override. This PC's own setting may well be translation, so
+    # telling the admin "translation isn't installed" would be false.
+    translation_unavailable_reason = (
+        "Captions only for this run - OpenEar was started with --captions-only. "
+        "Restart it without that flag to use this PC's own setting."
     )
-    nllb_sp = spm.SentencePieceProcessor(os.path.join(NLLB_MODEL_DIR, "sentencepiece.bpe.model"))
-    logger.info(f"NLLB translation model loaded in {time.time() - t0:.1f}s")
-except Exception as e:
-    logger.warning(f"NLLB translation model unavailable: {e}")
-    logger.warning("Translation will be disabled for this session.")
-    nllb_translator = None
-    nllb_sp = None
+    logger.info("Captions only (launch flag) - the translation model is not loaded and no video memory is used.")
+elif MODE_SOURCE == "mode.json":
+    # Captions only because someone CHOSE it in setup.
+    translation_unavailable_reason = (
+        "Translation isn't installed on this PC. To add it, run setup.bat again, "
+        "choose translation, then restart OpenEar. It needs an NVIDIA graphics card "
+        "with 6 GB or more."
+    )
+    logger.info("Captions only - the translation model is not loaded and no video memory is used.")
+else:
+    # Captions only because NOTHING valid was chosen: no mode.json (an install from
+    # before modes existed), or one that could not be read. Say that, rather than
+    # dress a missing choice up as a deliberate one — a PC that used to translate
+    # must be able to tell what happened.
+    translation_unavailable_reason = (
+        f"No mode has been chosen on this PC ({MODE_SOURCE.removesuffix(openear_config.DEFAULT_SUFFIX)}), so it runs "
+        "captions only. To add translation, run setup.bat, choose translation, then "
+        "restart OpenEar."
+    )
+    logger.warning(f"Captions only because no valid mode is recorded ({MODE_SOURCE}). Run setup.bat to choose.")
+
+
+def translation_available() -> bool:
+    """True only when the translation model is actually loaded and usable."""
+    return nllb_translator is not None and nllb_sp is not None
 
 # ============================================================================
 # SERVER STATE
@@ -273,6 +407,17 @@ def save_enabled_languages(codes: set[str]):
         json.dump({"enabled": sorted(codes)}, f, indent=2)
 
 enabled_languages: set[str] = load_enabled_languages()
+
+
+def effective_languages() -> set[str]:
+    """The languages clients can actually receive right now.
+
+    The admin's list when translation is running; English alone when it is not —
+    whether because this machine is captions-only or because the model failed to
+    load. languages.json is never rewritten to match, so a machine switched back
+    to translation gets the admin's list back exactly as it was.
+    """
+    return set(enabled_languages) if translation_available() else {"en"}
 
 
 # ============================================================================
@@ -435,9 +580,10 @@ def translate_text(text: str, target_lang: str) -> str:
         return text
 
 
-# Translation sentence buffer — accumulates text fragments until a sentence
-# boundary is found, then translates complete sentences for better quality.
-# English clients still get real-time fragments with no delay.
+# Translation sentence buffer — accumulates transcribed chunks until a sentence
+# boundary is found, so translation (and the text log) work on whole sentences.
+# It feeds translation clients only; English clients are sent each chunk as it
+# arrives and never wait on it. See broadcast().
 import re
 _sentence_end_re = re.compile(r'[.!?][\s]*$')
 _translation_buffer: str = ""
@@ -447,32 +593,73 @@ _translation_buffer: str = ""
 # Resets per server run; the logs are append-only per session.
 _segment_counter: int = 0
 
+# For a phone that has left English mid-sentence: which sentence it left in, and how
+# many characters of it it had already read. Lets a return to English send only the
+# part it has not seen. Written and read by the websocket handler.
+_english_left_at: dict = {}
+
 
 async def broadcast(message: dict):
     """Send a JSON message to every connected WebSocket client.
 
-    For transcript messages:
-    - English clients get text immediately (real-time, no delay)
-    - Translation clients receive buffered complete sentences for better quality.
-      Fragments accumulate until sentence-ending punctuation is detected, then
-      the full sentence is translated and sent. This adds a few seconds of latency
-      but dramatically improves translation accuracy (especially for languages
-      with different word order like Korean, Japanese, etc.)
+    A transcript message has two audiences, served in this order:
 
-    For non-transcript messages (status updates), sends identically to all.
+    1. ENGLISH clients get each chunk the moment Parakeet produces it. The chunk
+       IS the deliberate delay — 5 to 10 seconds of speech, because Parakeet
+       needs a whole phrase to transcribe and punctuate accurately (3 s chunks
+       measured 14.4% word error against 4.1% at 5 s). Nothing is added on top:
+       Parakeet's output is already capitalized and punctuated, and holding it
+       longer would not improve it.
+
+    2. TRANSLATION clients get whole sentences. The text is buffered until it
+       ends in . ! or ?, then translated once per language and sent. NLLB needs
+       the complete sentence to get word order right — Korean and Japanese put
+       the verb last — so this second wait is worth paying, but only by them.
+
+    English used to wait on the sentence buffer as well: the whole transcript
+    path sat inside the sentence-complete branch, so an English reader saw
+    nothing until a LATER chunk supplied a period, and a thought cut off before a
+    hymn did not arrive at all. This docstring said "real-time, no delay" the
+    entire time.
+
+    English for a chunk is sent BEFORE any translation of it starts. Translation
+    still runs inside this call, and transcription_loop() awaits the call, so the
+    loop is not watching for the next cut while it runs. Audio keeps buffering, so
+    nothing is lost. The cost is timing, and it adds up across languages: about
+    0.3-0.4 s per sentence for each language some phone is reading, on a desktop
+    GPU, more on a small one. Enabled languages nobody has chosen cost nothing. When the loop resumes it checks only the last half-second for silence, so
+    a pause the speaker took WHILE translation ran is missed, and the cut waits for
+    the next pause or the 10 s cap - it can come seconds late, not just by the time
+    translation took. Captions-only machines never pay this.
+
+    Non-transcript messages (status updates) go to everyone identically.
     """
-    global _translation_buffer
+    global _translation_buffer, _segment_counter
     disconnected = set()
-
-    global _segment_counter
 
     if message.get("type") == "transcript":
         english_text = message["text"]
 
-        # Accumulate text until we have a complete sentence
+        # 1. English readers: this chunk, now.
+        #
+        # Who counts as an English reader is fixed HERE, before the first await,
+        # and the chunk joins the sentence buffer before any send. Both matter for
+        # a phone that changes language while these sends are in flight: one that
+        # switches TO English is not in this list, and the catch-up in the
+        # websocket handler serves it from the buffer, which already holds this
+        # chunk - so it gets the chunk exactly once, rather than twice or never.
+        english_now = [c for c in connected_clients if client_languages.get(c, "en") == "en"]
         _translation_buffer += (" " if _translation_buffer else "") + english_text
+        for client in english_now:
+            try:
+                await client.send_json({"type": "transcript", "text": english_text, "lang": "en"})
+            except Exception:
+                disconnected.add(client)
+
+        # 2. Translation readers and the text log: whole sentences only.
 
         if _sentence_end_re.search(_translation_buffer):
+            sentence_raw = _translation_buffer        # unstripped: read-offsets index into this
             complete_text = _translation_buffer.strip()
             _translation_buffer = ""
 
@@ -503,11 +690,36 @@ async def broadcast(message: dict):
                 with open(TEXT_LOG_DIR / "source-en.txt", "a", encoding="utf-8") as f:
                     f.write(f"{segment_id:05d}\t{complete_text}\n")
 
-            # Translate once per language, send to all clients
-            translation_cache: dict[str, str] = {"en": complete_text}
-            for client in list(connected_clients):
+            # Translate once per language, send to each phone that was waiting for
+            # this sentence. English phones were served above, chunk by chunk.
+            #
+            # The waiting list is fixed before the first await, but each phone gets
+            # the sentence in the language it holds AT THE MOMENT OF SENDING. A phone
+            # that switched to English while this sentence was being translated
+            # would otherwise fall between the two paths - skipped here as English,
+            # and too late for the catch-up, because the buffer is already empty -
+            # and never see this sentence in either language.
+            waiting = [c for c in connected_clients
+                       if client_languages.get(c, "en") != "en" and c not in disconnected]
+            # How much of this sentence each waiting phone had already read in
+            # English before it left - snapshotted WITH the list, because the
+            # handler drops that record the moment the phone returns to English.
+            read_before = {c: _english_left_at.get(c) for c in waiting}
+            translation_cache: dict[str, str] = {}
+            for client in waiting:
                 lang = client_languages.get(client, "en")
                 try:
+                    if lang == "en":
+                        # Back in English while this sentence was being translated:
+                        # send only what it has not already read in English, or a
+                        # reader who briefly picked another language sees the start
+                        # of the sentence twice.
+                        rec = read_before.get(client)
+                        seen = rec[1] if rec and rec[0] == segment_id - 1 else 0
+                        unread = sentence_raw[seen:].strip()
+                        if unread:
+                            await client.send_json({"type": "transcript", "text": unread, "lang": "en"})
+                        continue
                     if lang not in translation_cache:
                         loop = asyncio.get_event_loop()
                         translated = await loop.run_in_executor(
@@ -722,10 +934,13 @@ def stop_capture():
         capture_stream.close()
         capture_stream = None
 
-    # Discard any unprocessed audio and translation buffer
+    # Discard any unprocessed audio and translation buffer - and the English
+    # read-offsets into that buffer, which would otherwise index into whatever
+    # sentence starts after the restart and hand a phone a garbled tail of it.
     with buffer_lock:
         audio_buffer.clear()
     _translation_buffer = ""
+    _english_left_at.clear()
 
     logger.info("Audio capture stopped")
 
@@ -758,6 +973,13 @@ def device_error(device_id, e: Exception) -> JSONResponse:
     return api_error(message)
 
 
+# ONE capture-control request at a time. api_start awaits the old transcription
+# loop's cancellation, and without this a Stop - or a second Start - from another
+# admin page could run in that gap: orphaning a transcription loop, or overwriting
+# an audio stream that is never closed. Two admin pages open at once is ordinary.
+_capture_lock = asyncio.Lock()
+
+
 @app.get("/api/devices")
 async def list_devices():
     """Return a list of available audio input devices for the admin dropdown."""
@@ -772,58 +994,69 @@ async def api_start(body: dict):
     devices without a separate stop call).
     """
     global transcription_task
+    async with _capture_lock:
+        device_id = body.get("device_id")
+        if device_id is None:
+            return api_error("device_id required")
 
-    device_id = body.get("device_id")
-    if device_id is None:
-        return api_error("device_id required")
+        # Stop monitor mode if active — capture and monitor can't share the same device
+        if is_monitoring:
+            stop_monitor()
 
-    # Stop monitor mode if active — capture and monitor can't share the same device
-    if is_monitoring:
-        stop_monitor()
+        # Stop any existing capture before starting a new one - and its transcription
+        # loop. start_capture() sets is_capturing back to True at once, so a loop left
+        # running here would pass its own "while is_capturing" check and keep going
+        # beside the new one: two loops cutting the same audio, their broadcasts
+        # overlapping, chunks able to reach phones out of order.
+        was_capturing = is_capturing
+        if is_capturing:
+            stop_capture()
+        if transcription_task:
+            transcription_task.cancel()
+            try:
+                await transcription_task
+            except asyncio.CancelledError:
+                pass
+            transcription_task = None
 
-    # Stop any existing capture before starting a new one
-    was_capturing = is_capturing
-    if is_capturing:
-        stop_capture()
+        try:
+            start_capture(device_id)
+        except Exception as e:
+            # If this was a device switch, the old capture is already gone — tell the
+            # clients, or they keep showing "live" over a silent server.
+            if was_capturing:
+                await broadcast({"type": "status", "capturing": False})
+            return device_error(device_id, e)
 
-    try:
-        start_capture(device_id)
-    except Exception as e:
-        # If this was a device switch, the old capture is already gone — tell the
-        # clients, or they keep showing "live" over a silent server.
-        if was_capturing:
-            await broadcast({"type": "status", "capturing": False})
-        return device_error(device_id, e)
+        # Launch the transcription loop as an async task running alongside
+        # the web server — it will keep running until stop is called
+        transcription_task = asyncio.create_task(transcription_loop())
 
-    # Launch the transcription loop as an async task running alongside
-    # the web server — it will keep running until stop is called
-    transcription_task = asyncio.create_task(transcription_loop())
-
-    # Notify all connected clients that captioning is now active
-    await broadcast({"type": "status", "capturing": True})
-    return {"status": "capturing", "device_id": device_id}
+        # Notify all connected clients that captioning is now active
+        await broadcast({"type": "status", "capturing": True})
+        return {"status": "capturing", "device_id": device_id}
 
 
 @app.post("/api/stop")
 async def api_stop():
     """Stop audio capture and transcription."""
     global transcription_task
+    async with _capture_lock:
+        stop_capture()
 
-    stop_capture()
+        # Cancel the transcription loop task and wait for it to finish
+        if transcription_task:
+            transcription_task.cancel()
+            try:
+                await transcription_task
+            except asyncio.CancelledError:
+                pass
+            transcription_task = None
 
-    # Cancel the transcription loop task and wait for it to finish
-    if transcription_task:
-        transcription_task.cancel()
-        try:
-            await transcription_task
-        except asyncio.CancelledError:
-            pass
-        transcription_task = None
-
-    # Notify all clients that captioning has stopped — they'll show
-    # the "OpenEar Disabled" banner
-    await broadcast({"type": "status", "capturing": False})
-    return {"status": "stopped"}
+        # Notify all clients that captioning has stopped — they'll show
+        # the "OpenEar Disabled" banner
+        await broadcast({"type": "status", "capturing": False})
+        return {"status": "stopped"}
 
 
 @app.post("/api/monitor/start")
@@ -833,25 +1066,27 @@ async def api_monitor_start(body: dict):
     Lets the admin verify the correct device is live and at a good level
     before committing to a full capture session.
     """
-    device_id = body.get("device_id")
-    if device_id is None:
-        return api_error("device_id required")
-    if is_capturing:
-        return api_error("Cannot monitor while capturing")
-    if is_monitoring:
-        stop_monitor()
-    try:
-        start_monitor(device_id)
-    except Exception as e:
-        return device_error(device_id, e)
-    return {"status": "monitoring", "device_id": device_id}
+    async with _capture_lock:
+        device_id = body.get("device_id")
+        if device_id is None:
+            return api_error("device_id required")
+        if is_capturing:
+            return api_error("Cannot monitor while capturing")
+        if is_monitoring:
+            stop_monitor()
+        try:
+            start_monitor(device_id)
+        except Exception as e:
+            return device_error(device_id, e)
+        return {"status": "monitoring", "device_id": device_id}
 
 
 @app.post("/api/monitor/stop")
 async def api_monitor_stop():
     """Stop monitor mode."""
-    stop_monitor()
-    return {"status": "stopped"}
+    async with _capture_lock:
+        stop_monitor()
+        return {"status": "stopped"}
 
 
 @app.get("/api/status")
@@ -872,6 +1107,9 @@ async def api_status():
         "audio_level": round(current_audio_level, 3),
         "clipping": audio_clipping,
         "languages": lang_counts,
+        "mode": MODE,
+        "translation_available": translation_available(),
+        "started": SERVER_STARTED,
     }
 
 
@@ -883,15 +1121,23 @@ async def api_status():
 
 @app.get("/api/languages")
 async def list_languages():
-    """Return all NLLB languages and which ones are enabled for clients.
+    """Return all NLLB languages, which ones clients can receive, and why.
 
-    'installed' = all available languages (for admin toggle list)
-    'enabled' = languages visible to clients (admin-controlled)
+    'installed'   = every language the model knows (the admin's toggle list)
+    'enabled'     = the languages clients can actually choose right now —
+                    English alone whenever translation is not running
+    'translation' = the mode, whether translation is running, and if not, the
+                    reason, in words the admin page shows as-is
     """
     available = get_available_languages()
     return {
         "installed": available,
-        "enabled": sorted(enabled_languages),
+        "enabled": sorted(effective_languages()),
+        "translation": {
+            "mode": MODE,
+            "available": translation_available(),
+            "reason": translation_unavailable_reason,
+        },
     }
 
 @app.post("/api/languages/enable")
@@ -900,9 +1146,12 @@ async def enable_language(body: dict):
     code = body.get("code", "")
     if code not in NLLB_LANG_MAP and code != "en":
         return api_error(f"Unknown language code: {code}")
+    if code != "en" and not translation_available():
+        # 409: the request is fine, this machine's state is what refuses it.
+        return api_error(translation_unavailable_reason, status=409)
     enabled_languages.add(code)
     save_enabled_languages(enabled_languages)
-    return {"enabled": sorted(enabled_languages)}
+    return {"enabled": sorted(effective_languages())}
 
 @app.post("/api/languages/disable")
 async def disable_language(body: dict):
@@ -912,7 +1161,7 @@ async def disable_language(body: dict):
         return api_error("English cannot be disabled")
     enabled_languages.discard(code)
     save_enabled_languages(enabled_languages)
-    return {"enabled": sorted(enabled_languages)}
+    return {"enabled": sorted(effective_languages())}
 
 
 @app.get("/api/server-info")
@@ -974,10 +1223,12 @@ async def websocket_captions(websocket: WebSocket):
     client_languages[websocket] = "en"  # Default to English
     logger.info(f"Client connected ({len(connected_clients)} total)")
 
-    # Tell the new client whether captioning is currently active,
-    # and send only the admin-enabled languages for the dropdown
+    # Tell the new client whether captioning is currently active, and send only
+    # the languages it can actually receive — English alone when translation is
+    # not running, so a phone is never offered a language it would not get.
     all_langs = get_available_languages()
-    visible = [l for l in all_langs if l["code"] in enabled_languages]
+    offered = effective_languages()
+    visible = [l for l in all_langs if l["code"] in offered]
     await websocket.send_json({"type": "status", "capturing": is_capturing})
     await websocket.send_json({
         "type": "languages",
@@ -993,8 +1244,31 @@ async def websocket_captions(websocket: WebSocket):
                 msg = json.loads(raw)
                 if msg.get("type") == "set_language" and msg.get("lang"):
                     old_lang = client_languages.get(websocket, "en")
-                    client_languages[websocket] = msg["lang"]
-                    logger.info(f"Client switched language: {old_lang} -> {msg['lang']}")
+                    requested = msg["lang"]
+                    # A phone can ask for a language it was never offered — most
+                    # often one saved in its browser from an earlier visit. Serve
+                    # English rather than translate into something the admin has
+                    # not enabled, or that this machine cannot produce at all.
+                    new_lang = requested if requested in effective_languages() else "en"
+                    client_languages[websocket] = new_lang
+                    if new_lang != requested:
+                        logger.info(f"Client asked for {requested}, which is not offered - serving English")
+                    else:
+                        logger.info(f"Client switched language: {old_lang} -> {new_lang}")
+                    # A phone moving between English and a translation mid-sentence.
+                    # Leaving English: remember how much of this sentence it has
+                    # already read. Returning to English: send the part of the
+                    # sentence so far that it has NOT read - all of it, if it left
+                    # during an earlier sentence or joined in another language.
+                    # English chunks go only to English phones, so without this it
+                    # would never see those words in any language.
+                    if old_lang == "en" and new_lang != "en":
+                        _english_left_at[websocket] = (_segment_counter, len(_translation_buffer))
+                    elif new_lang == "en" and old_lang != "en":
+                        seg, seen = _english_left_at.pop(websocket, (None, 0))
+                        unread = _translation_buffer[seen if seg == _segment_counter else 0:].strip()
+                        if unread:
+                            await websocket.send_json({"type": "transcript", "text": unread, "lang": "en"})
             except (json.JSONDecodeError, Exception):
                 pass  # Ignore malformed messages
     except WebSocketDisconnect:
@@ -1002,6 +1276,7 @@ async def websocket_captions(websocket: WebSocket):
     finally:
         connected_clients.discard(websocket)
         client_languages.pop(websocket, None)
+        _english_left_at.pop(websocket, None)
         logger.info(f"Client disconnected ({len(connected_clients)} total)")
 
 
@@ -1014,8 +1289,11 @@ async def health():
     """Simple health check endpoint for monitoring tools."""
     return {
         "status": "ok",
+        "version": VERSION,
+        "mode": MODE,
         "model": ASR_MODEL,
-        "device": "cpu (ASR) / cuda (translation)",
+        "device": "cpu (ASR) / cuda (translation)" if translation_available() else "cpu (ASR)",
+        "translation_available": translation_available(),
         "capturing": is_capturing,
     }
 

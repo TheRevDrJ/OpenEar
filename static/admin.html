@@ -276,6 +276,22 @@
   .meter-fill.hot { background: var(--danger); }
 
   /* --- Language management --- */
+
+  /* Why the language list is locked. Neutral when this PC is captions-only by
+     choice; amber when translation was chosen but could not start. The detail
+     line is the server's own sentence, set with textContent. */
+  .lang-notice {
+    display: none;
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    background: var(--surface-hover);
+  }
+  .lang-notice.warn { background: rgba(251, 191, 36, 0.15); }
+  .lang-notice-head { font-weight: 700; font-size: 14px; }
+  .lang-notice.warn .lang-notice-head { color: var(--warning); }
+  .lang-notice-body { color: var(--text-dim); font-size: 13px; line-height: 1.45; margin-top: 4px; }
+
   .lang-list {
     list-style: none;
     max-height: 200px;
@@ -450,6 +466,7 @@
       <button class="collapse-btn" id="lang-toggle" onclick="toggleLangSection()">Hide</button>
     </div>
     <div id="lang-section">
+      <div class="lang-notice" id="lang-notice"></div>
       <input type="text" class="lang-search" id="lang-search" placeholder="Search languages...">
       <ul class="lang-list" id="lang-list"></ul>
     </div>
@@ -470,6 +487,10 @@
 
   <div class="card">
     <h2>Status</h2>
+    <div class="info-row">
+      <span class="info-label">Mode</span>
+      <span class="info-value" id="mode-value">—</span>
+    </div>
     <div class="info-row">
       <span class="info-label">Connected clients</span>
       <span class="info-value" id="client-count">0</span>
@@ -699,6 +720,13 @@ async function updateStatus() {
     toggleStatus.textContent = data.capturing ? 'Live' : 'Off';
     toggleStatus.className = 'toggle-status' + (data.capturing ? ' active' : '');
     clientCount.textContent = data.clients;
+    modeValue.textContent = modeLabel(data);
+    // The language card loads once; if the server has since restarted - into the
+    // other mode, or the same mode for a different reason - reload it too, or it
+    // contradicts the Mode row beside it.
+    const modeKey = data.mode + '/' + data.translation_available + '/' + data.started;
+    if (lastModeKey !== null && modeKey !== lastModeKey) loadLanguages();
+    lastModeKey = modeKey;
 
     if (data.device_id !== null && devices.length > 0) {
       const dev = devices.find(d => d.id === data.device_id);
@@ -743,9 +771,23 @@ async function updateStatus() {
 const langCount = document.getElementById('lang-count');
 const langList = document.getElementById('lang-list');
 const langSearch = document.getElementById('lang-search');
+const langNotice = document.getElementById('lang-notice');
+const modeValue = document.getElementById('mode-value');
 
 let allLanguages = [];
 let enabledSet = new Set();
+// Whether this PC can translate right now, and why not. Assume it can until the
+// server says otherwise, so an older server without this field still works.
+let translationInfo = { mode: null, available: true, reason: null };
+// The mode the status poller last saw, so a change can refresh the language card.
+let lastModeKey = null;
+
+/** The Status card's words for this PC's mode. */
+function modeLabel(data) {
+  if (!data.mode) return '—';
+  if (data.mode === 'captions') return 'Captions only';
+  return data.translation_available ? 'Captions + translation' : "Translation couldn't start";
+}
 
 async function loadLanguages() {
   try {
@@ -753,13 +795,43 @@ async function loadLanguages() {
     const data = await res.json();
     allLanguages = data.installed || [];
     enabledSet = new Set(data.enabled || ['en']);
+    if (data.translation) translationInfo = data.translation;
+    renderTranslationNotice();
     renderLanguages();
   } catch (e) {
     langCount.textContent = 'Error';
   }
 }
 
+/**
+ * Explain a locked language list. Two different situations, shown differently:
+ * a captions-only PC is working exactly as set up (neutral), while a PC set up
+ * for translation that could not load it is a problem to fix (amber).
+ */
+function renderTranslationNotice() {
+  if (translationInfo.available) {
+    langNotice.style.display = 'none';
+    return;
+  }
+  const failed = translationInfo.mode === 'translation';
+  langNotice.className = 'lang-notice' + (failed ? ' warn' : '');
+  const head = document.createElement('div');
+  head.className = 'lang-notice-head';
+  head.textContent = failed ? "Translation couldn't start" : 'Captions only';
+  const body = document.createElement('div');
+  body.className = 'lang-notice-body';
+  body.textContent = translationInfo.reason || '';
+  langNotice.replaceChildren(head, body);
+  langNotice.style.display = 'block';
+}
+
 function renderLanguages() {
+  // Without translation every other language is shown but locked. Clear any
+  // search FIRST - before the filter is read - or a filter typed earlier would be
+  // applied behind a box that can no longer be edited.
+  const locked = !translationInfo.available;
+  if (locked && langSearch.value) langSearch.value = '';
+  langSearch.disabled = locked;
   const filter = langSearch.value.toLowerCase();
   langList.innerHTML = '';
 
@@ -776,12 +848,15 @@ function renderLanguages() {
     langList.appendChild(li);
   }
 
+  // The list stays visible while locked, so an operator can see what translation
+  // would offer; the notice above it says why it is locked.
+
   filtered.forEach(lang => {
     const li = document.createElement('li');
     li.className = 'lang-item';
     const checked = enabledSet.has(lang.code);
-    li.innerHTML = `<span class="lang-name">${lang.name}</span>
-      <label class="lang-switch"><input type="checkbox" ${checked ? 'checked' : ''} data-code="${lang.code}"><span class="lang-slider"></span></label>`;
+    li.innerHTML = `<span class="lang-name${locked ? ' disabled' : ''}">${lang.name}</span>
+      <label class="lang-switch"><input type="checkbox" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''} data-code="${lang.code}"><span class="lang-slider"></span></label>`;
     li.querySelector('input').addEventListener('change', (e) => toggleLang(lang.code, e.target.checked));
     langList.appendChild(li);
   });

@@ -43,7 +43,7 @@ OpenEar is different:
 
 ## Hardware Requirements
 
-OpenEar grows with your needs. **Live captioning runs on hardware you almost certainly already have — no graphics card.** Translation into other languages is an optional step you can add later by dropping in a single inexpensive card.
+OpenEar grows with your needs. **Live captioning runs on hardware you almost certainly already have — no graphics card.** Translation into other languages is an optional step you can add later by dropping in a single inexpensive card and running setup again.
 
 ### For live captioning (no GPU needed)
 
@@ -53,9 +53,9 @@ OpenEar grows with your needs. **Live captioning runs on hardware you almost cer
 | CPU | Any modern multi-core CPU (Ryzen 5 / Core i5, ~2018 or newer) |
 | RAM | 8 GB |
 | GPU | **None.** Transcription runs entirely on the CPU. |
-| Storage | 5 GB available |
+| Storage | 6 GB available (the speech model and its software) |
 
-Captioning uses NVIDIA's Parakeet speech model, which runs on the CPU at roughly 34× real-time. No graphics card is involved at any point — this is the only way OpenEar does transcription, by design.
+Captioning uses NVIDIA's Parakeet speech model, which runs on the CPU many times faster than real time — measured on a desktop Intel i7-12700K, 8 seconds of speech transcribes in about 0.4 seconds. No graphics card is involved at any point — this is the only way OpenEar does transcription, by design.
 
 ### To add translation (200+ languages)
 
@@ -64,8 +64,9 @@ Translation uses Meta's NLLB-200 model, which runs on an NVIDIA GPU. Add one car
 | Component | Spec |
 |-----------|------|
 | GPU | An **NVIDIA card with 6 GB+ VRAM** — starting as low as $250 |
+| Storage | About 14 GB more (the translation model is a 13 GB download) |
 
-> **The cheapest path:** OpenEar's translation needs only ~4.5 GB of VRAM, so an inexpensive NVIDIA card with 6 GB or more is plenty — these start around **$250 new** (prices vary). Look for a **low-power, slot-powered model**: it draws all its power from the PCIe slot itself, needs no supplemental power connector, and drops into almost any existing PC with **no power-supply upgrade.** For most churches, that one card is the entire hardware cost.
+> **The cheapest path:** OpenEar's translation needs only ~4.6 GB of VRAM, so an inexpensive NVIDIA card with 6 GB or more is plenty — these start around **$250 new** (prices vary). Look for a **low-power, slot-powered model**: it draws all its power from the PCIe slot itself, needs no supplemental power connector, and drops into almost any existing PC with **no power-supply upgrade.** For most churches, that one card is the entire hardware cost.
 
 You also need a local network (church WiFi or a simple $30 router) for clients to connect.
 
@@ -96,7 +97,7 @@ This is the actual hardware OpenEar is developed and tested on:
 | Resource | Usage |
 |----------|-------|
 | RAM in use | ~7 GB of 64 GB |
-| VRAM in use | ~4.4 GB of 24 GB |
+| VRAM in use | ~4.6 GB of 24 GB (about 4.2 GB until the first translation) |
 | Disk space | ~100 GB (includes OS, models, and translation packs) |
 
 *This server is significantly overpowered for OpenEar. Captioning needs nothing like it — the everyday desktop listed under Hardware Requirements is enough, with no graphics card at all.*
@@ -106,7 +107,7 @@ This is the actual hardware OpenEar is developed and tested on:
 ### Prerequisites
 
 1. **Python 3.13+** — install from the Microsoft Store (search "Python 3.13", click Get)
-2. **NVIDIA GPU drivers — only if you're adding translation.** Captioning needs no GPU and no drivers. If you've installed an NVIDIA graphics card for translation, download the full **Game Ready** or **Studio** driver from [nvidia.com/drivers](https://www.nvidia.com/drivers). **Windows Update installs a basic display driver that does not include the CUDA runtime** — translation will fail silently if you rely on it. Even if `nvidia-smi` works, you may still be missing the CUDA runtime DLLs. Install the full driver from nvidia.com, restart, then run setup.
+2. **NVIDIA GPU drivers — only if you're adding translation.** Captioning needs no GPU and no drivers. If you've installed an NVIDIA graphics card for translation, download the full **Game Ready** or **Studio** driver from [nvidia.com/drivers](https://www.nvidia.com/drivers). **Windows Update installs a basic display driver that does not include the CUDA runtime** — translation will not start if you rely on it (the admin page says why). Even if `nvidia-smi` works, you may still be missing the CUDA runtime DLLs. Install the full driver from nvidia.com, restart, then run setup.
 
 That's it. The setup script handles everything else.
 
@@ -114,13 +115,22 @@ That's it. The setup script handles everything else.
 
 1. Clone or download the repo
 2. Right-click `setup.bat` → **Run as administrator**
-3. Wait for setup to complete (~15–30 minutes, downloads ~5.5GB of AI models)
-4. Start the server: `openear.bat start`
-5. Open `http://localhost/admin` to configure audio input
-6. Congregation connects at `http://<server-ip>` on any device on the same WiFi
-7. *(Optional)* Set a custom Windows desktop wallpaper — right-click desktop → Personalize
+3. Answer its one question: **captions only, or captions plus translation.** Captions only is the default — it needs no graphics card, so it can share a PC with streaming or video software. Choose translation only on a PC with an NVIDIA card to spare. To change your answer later, run `setup.bat` again.
+4. Wait for setup to complete (~15–30 minutes; downloads ~2.5GB of AI models for captions only, ~16GB with translation)
+5. Start the server: `openear.bat start`
+6. Open `http://localhost/admin` to configure audio input
+7. Congregation connects at `http://<server-ip>` on any device on the same WiFi
+8. *(Optional)* Set a custom Windows desktop wallpaper — right-click desktop → Personalize
 
 > **Note:** OpenEar runs on port 80 (standard HTTP) so users don't need to remember a port number. Your browser may show a "not secure" warning — this is normal. Everything runs on your local network. No data leaves the building.
+
+### How long captions take to appear
+
+Captions arrive a phrase at a time. OpenEar listens until the speaker pauses — or for ten seconds at most — then transcribes the whole phrase at once, because the speech model needs a complete phrase to get the words, capitals and punctuation right. Shorter phrases were measured and made captions noticeably less accurate (14.4% of words wrong at three seconds, against 4.1% at five), so the length is deliberate.
+
+So any given word appears between a moment and about ten seconds after it is spoken — the first word of a phrase waits the longest, the last hardly at all. Translated captions wait one step longer: translation works on whole sentences, so they appear when the sentence ends.
+
+**Tip:** open the service with a sentence that doesn't matter, such as telling people how to connect. The first phrase is the one everyone waits through with an empty screen.
 
 ## Roadmap
 

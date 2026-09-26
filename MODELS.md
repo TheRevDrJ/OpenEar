@@ -36,7 +36,7 @@ This licensing question is settled; do not re-litigate it.
 | | |
 |---|---|
 | Repo | `entai2965/nllb-200-3.3B-ctranslate2` |
-| Size | ~5.5 GB (int8) |
+| Size | 13.4 GB on disk (float32, quantized to int8 at load) · video memory ~4.1 GB loaded, ~4.6 GB once translating |
 | License | CC-BY-NC-4.0 |
 | Adequacy — Spanish | **87.3%** |
 | Adequacy — Korean | **72.9%** |
@@ -61,7 +61,7 @@ as fast.
 | | |
 |---|---|
 | Repo | `Nextcloud-AI/madlad400-3b-mt-ct2-int8` |
-| Size | 2.77 GB (int8) — half of NLLB |
+| Size | 2.77 GB (int8, stored that way) — about a fifth of NLLB's 13.4 GB download |
 | License | **Apache-2.0** (permissive — the main attraction) |
 | Adequacy — Spanish | 87.4% |
 | Adequacy — Korean | 70.7% |

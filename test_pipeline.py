@@ -450,8 +450,9 @@ def align_text_to_audio(audio_path: str, full_text_path: str, asr_model,
 def load_translator():
     """Load NLLB-200 3.3B translation model via CTranslate2.
 
-    Uses GPU if available (device="auto"), otherwise CPU. First call
-    may be slow if the model hasn't been downloaded yet (~3GB one-time).
+    Uses GPU if available (device="auto"), otherwise CPU. Needs the model at
+    models/nllb-3.3b-ct2 (~13GB, fetched by setup.bat / download_models.py);
+    nothing here downloads it.
     """
     import ctranslate2
     import sentencepiece as spm

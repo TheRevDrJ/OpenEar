@@ -9,6 +9,27 @@ set "SCRIPT_DIR=%~dp0"
 :: OpenEar Setup Script
 :: Installs all dependencies and configures Windows for OpenEar.
 :: Must be run as Administrator (for firewall rule and long paths).
+::
+:: It asks ONE question: captions only, or captions plus translation. The answer
+:: is recorded in mode.json (openear_config.py owns that file) and read at every
+:: server start. Run this script again at any time to change it.
+::
+::   setup.bat                   asks. Pressing Enter keeps this machine's
+::                               current mode, or picks captions only on a
+::                               first install.
+::   setup.bat --captions-only   no question: captions only
+::   setup.bat --translation     no question: captions plus translation
+::   setup.bat --remote          also installs remote-management tools
+::
+:: Captions only is the default because it is the one that cannot hurt the PC it
+:: runs on: it never touches the graphics card. Translation takes about 4.6 GB of
+:: an NVIDIA GPU's memory, which is only safe on a machine that can spare it.
+::
+:: THIS FILE IS PARSED BY cmd.exe WITH DELAYED EXPANSION ON. An exclamation mark
+:: in any echo is silently eaten, and a bare ( or ) inside an if-block ends the
+:: block early. Escape parentheses as ^( ^) there; never use exclamation marks.
+:: It must also stay CRLF (.gitattributes enforces it on checkout): with LF line
+:: endings cmd mis-parses labels and falls through into the wrong branch.
 :: ============================================================================
 
 echo.
@@ -16,6 +37,42 @@ echo   ============================================
 echo     OpenEar Setup
 echo   ============================================
 echo.
+
+:: ----------------------------------------------------------------------------
+:: Arguments. Unknown ones stop setup rather than being ignored, because a
+:: mistyped --captions-only would otherwise run the whole install in the mode
+:: nobody asked for.
+:: ----------------------------------------------------------------------------
+set "REMOTE=0"
+set "MODE_ARG="
+:parse_args
+if "%~1"=="" goto args_done
+if /i "%~1"=="--remote" goto arg_remote
+if /i "%~1"=="--captions-only" goto arg_captions
+if /i "%~1"=="--translation" goto arg_translation
+echo   ERROR: Unknown option: %~1
+echo   Options: --captions-only   --translation   --remote
+echo.
+exit /b 2
+:arg_remote
+set "REMOTE=1"
+goto next_arg
+:arg_captions
+if "!MODE_ARG!"=="translation" goto arg_conflict
+set "MODE_ARG=captions"
+goto next_arg
+:arg_translation
+if "!MODE_ARG!"=="captions" goto arg_conflict
+set "MODE_ARG=translation"
+goto next_arg
+:arg_conflict
+echo   ERROR: --captions-only and --translation cannot be used together.
+echo.
+exit /b 2
+:next_arg
+shift
+goto parse_args
+:args_done
 
 :: ----------------------------------------------------------------------------
 :: Check for admin privileges
@@ -31,35 +88,19 @@ if %errorlevel% neq 0 (
 echo   [OK] Running as Administrator
 
 :: ----------------------------------------------------------------------------
-:: Check NVIDIA drivers are installed (required for GPU stability)
+:: Look for an NVIDIA graphics card. Only translation needs one - captions run on
+:: the processor - so this only informs the question below. It never stops a
+:: captions-only install, which is the point: "no graphics card needed" has to be
+:: true of the installer too, not just of the server.
 :: ----------------------------------------------------------------------------
-nvidia-smi >nul 2>&1
-if %errorlevel% neq 0 (
-    echo.
-    echo   WARNING: NVIDIA drivers not detected!
-    echo.
-    echo   If this PC has an NVIDIA GPU, you MUST install the latest
-    echo   drivers before running OpenEar. Without them, the system
-    echo   will be very unstable.
-    echo.
-    echo   Download drivers from: https://www.nvidia.com/drivers
-    echo.
-    echo   Install drivers, restart your computer, then run this
-    echo   setup script again.
-    echo.
-    set /p CONTINUE="   Continue anyway without GPU support? (y/N): "
-    if /i not "!CONTINUE!"=="y" (
-        echo   Setup cancelled. Install NVIDIA drivers first.
-        pause
-        exit /b 1
-    )
-    echo   [WARN] Continuing without NVIDIA GPU drivers
-    goto gpu_done
-)
-
-for /f "tokens=2 delims=:" %%g in ('nvidia-smi -L 2^>nul ^| findstr /i "GPU"') do set GPUNAME=%%g
-echo   [OK] NVIDIA drivers found -!GPUNAME!
-:gpu_done
+::
+:: A card counts as found only if nvidia-smi -L actually LISTS one ("GPU 0: ...").
+:: Its exit code is not trusted: a crashed nvidia-smi returns a negative code,
+:: which "if errorlevel 1" reads as success.
+set "HAS_GPU=0"
+set "GPUNAME="
+for /f "tokens=2 delims=:(" %%g in ('nvidia-smi -L 2^>nul ^| findstr /b /c:"GPU "') do if not defined GPUNAME set "GPUNAME=%%g"
+if defined GPUNAME set "HAS_GPU=1"
 
 :: ----------------------------------------------------------------------------
 :: Check Python is installed
@@ -93,7 +134,111 @@ if %errorlevel% neq 0 (
 echo   [OK] pip available
 
 :: ----------------------------------------------------------------------------
-:: Enable Windows Long Paths (required for PyTorch/CUDA packages)
+:: Captions only, or captions plus translation?
+::
+:: Asked HERE, before anything is installed, so nobody is asked a question
+:: twenty minutes into an install they walked away from - and so cancelling
+:: leaves the machine exactly as it was.
+:: ----------------------------------------------------------------------------
+set "CURRENT_MODE=none"
+for /f "delims=" %%m in ('python "%SCRIPT_DIR%openear_config.py" --current 2^>nul') do set "CURRENT_MODE=%%m"
+
+echo.
+echo   ============================================
+echo     Captions only, or captions plus translation?
+echo   ============================================
+echo.
+echo   Captions only      English captions on every phone. Runs on the
+echo                      processor - no graphics card needed - so it can
+echo                      share this PC with streaming or video software.
+echo.
+echo   Translation        The same captions, plus live translation into
+echo                      200+ languages. Needs an NVIDIA graphics card with
+echo                      6 GB or more and uses about 4.6 GB of it, so it
+echo                      wants a PC of its own.
+echo.
+if "!HAS_GPU!"=="1" (
+    echo   Graphics card found:!GPUNAME!
+) else (
+    echo   Graphics card found: none from NVIDIA
+)
+if "!CURRENT_MODE!"=="translation" echo   This PC is currently set up for: captions plus translation
+if "!CURRENT_MODE!"=="captions" echo   This PC is currently set up for: captions only
+if "!CURRENT_MODE!"=="none" echo   This PC has not chosen yet.
+echo.
+
+if defined MODE_ARG (
+    set "MODE=!MODE_ARG!"
+    echo   Chosen on the command line: !MODE_ARG!
+    goto mode_answered
+)
+
+set "DEFAULT_MODE=captions"
+if "!CURRENT_MODE!"=="translation" set "DEFAULT_MODE=translation"
+set "PROMPT_HINT=y/N"
+if "!DEFAULT_MODE!"=="translation" set "PROMPT_HINT=Y/n"
+
+:ask_mode
+:: ANSWER is cleared first on purpose. set /p leaves a variable UNCHANGED when it
+:: reads nothing - no keyboard, or a script piping in no input - so without this
+:: it would keep a stale value, or one inherited from the environment.
+set "ANSWER="
+set /p ANSWER="   Add translation? [!PROMPT_HINT!]: "
+set "MODE=!DEFAULT_MODE!"
+if "!ANSWER!"=="" goto mode_answered
+if /i "!ANSWER!"=="y" goto answer_translation
+if /i "!ANSWER!"=="yes" goto answer_translation
+if /i "!ANSWER!"=="n" goto answer_captions
+if /i "!ANSWER!"=="no" goto answer_captions
+echo   Please answer y or n.
+goto ask_mode
+:answer_translation
+set "MODE=translation"
+goto mode_answered
+:answer_captions
+set "MODE=captions"
+:mode_answered
+
+:: Translation without an NVIDIA card cannot work. Say so now, before installing
+:: anything, rather than let the server discover it at its first start.
+if not "!MODE!"=="translation" goto mode_final
+if "!HAS_GPU!"=="1" goto mode_final
+echo.
+echo   Translation needs an NVIDIA graphics card, and none was found:
+echo   nvidia-smi is missing, or it found no GPU.
+echo.
+echo   If this PC does have an NVIDIA card, install the full driver from
+echo   https://www.nvidia.com/drivers - not the basic one Windows Update
+echo   installs - then restart and run setup.bat again.
+echo.
+if defined MODE_ARG (
+    echo   Setup stopped: --translation was requested. Nothing was changed.
+    echo.
+    exit /b 1
+)
+set "ANSWER="
+set /p ANSWER="   Set up captions only for now instead? [Y/n]: "
+if /i "!ANSWER!"=="n" goto cancel_setup
+if /i "!ANSWER!"=="no" goto cancel_setup
+set "MODE=captions"
+goto mode_final
+:cancel_setup
+echo.
+echo   Setup cancelled. Nothing was changed.
+echo.
+pause
+exit /b 1
+:mode_final
+
+if "!MODE!"=="translation" (
+    echo   [OK] Setting up: captions plus translation
+) else (
+    echo   [OK] Setting up: captions only
+)
+
+:: ----------------------------------------------------------------------------
+:: Enable Windows Long Paths (the NVIDIA CUDA packages in requirements.txt have
+:: paths longer than Windows allows by default)
 :: ----------------------------------------------------------------------------
 echo.
 echo   Enabling Windows long path support...
@@ -144,7 +289,7 @@ if defined PYTHONW_PATH (
 :firewall_done
 
 :: ----------------------------------------------------------------------------
-:: Install Visual C++ Runtime (required by CUDA/CTranslate2)
+:: Install Visual C++ Runtime (required by onnxruntime and CTranslate2)
 :: ----------------------------------------------------------------------------
 echo.
 echo   Checking Visual C++ Runtime...
@@ -181,7 +326,7 @@ if exist "%SCRIPT_DIR%venv" (
     echo   [OK] Virtual environment already exists
 ) else (
     python -m venv "%SCRIPT_DIR%venv"
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo   [FAIL] Could not create virtual environment.
         pause
         exit /b 1
@@ -205,22 +350,16 @@ if %errorlevel% neq 0 (
 echo   [OK] All packages installed
 
 :: ----------------------------------------------------------------------------
-:: CUDA GPU check (packages are already in requirements.txt)
+:: Translation only: check the CUDA runtime really loads. nvidia-smi can find a
+:: card while the CUDA libraries still fail - Windows Update's basic display
+:: driver does exactly that - and translation would then fail at every start.
 :: ----------------------------------------------------------------------------
+if not "!MODE!"=="translation" goto cuda_done
 echo.
-nvidia-smi >nul 2>&1
-if %errorlevel% neq 0 (
-    echo   [INFO] No NVIDIA GPU detected. Translation will run on CPU.
-    echo          This works but is slower. A GPU is recommended for translation.
-    goto cuda_done
-)
-echo   [OK] NVIDIA GPU detected - CUDA libraries included in requirements.txt
-
-:: Verify CUDA DLLs are actually loadable
 "%SCRIPT_DIR%venv\Scripts\python.exe" -c "import nvidia.cublas, os, ctypes; p=os.path.join(os.path.dirname(nvidia.cublas.__path__[0]),'cublas','bin'); ctypes.CDLL(os.path.join(p,'cublas64_12.dll')); print('OK')" >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
-    echo   WARNING: CUDA runtime DLLs are not accessible!
+    echo   WARNING: CUDA runtime DLLs are not accessible.
     echo.
     echo   nvidia-smi detected your GPU, but the CUDA runtime libraries
     echo   ^(cublas64_12.dll^) could not be loaded. This means translation
@@ -229,32 +368,57 @@ if %errorlevel% neq 0 (
     echo   Fix: Install the full NVIDIA Game Ready or Studio Driver from:
     echo     https://www.nvidia.com/drivers
     echo.
-    echo   Windows Update installs a basic display driver only — it does
+    echo   Windows Update installs a basic display driver only - it does
     echo   NOT include the CUDA runtime. You need the full driver package
     echo   from nvidia.com. After installing, restart and run setup again.
     echo.
+    echo   Captions will still work. The admin page will say why translation
+    echo   is off.
+    echo.
+    goto cuda_done
 )
+echo   [OK] NVIDIA GPU and CUDA runtime ready for translation
 :cuda_done
 
 :: ----------------------------------------------------------------------------
-:: Pre-download AI models (Parakeet ASR + NLLB translation)
+:: Record the choice. Written only now, after the packages installed, so a
+:: failed install never leaves a mode recorded for software that is not there.
 :: ----------------------------------------------------------------------------
 echo.
-echo   Downloading AI models (~5GB total, one-time download)...
+"%SCRIPT_DIR%venv\Scripts\python.exe" "%SCRIPT_DIR%openear_config.py" --write !MODE!
+if %errorlevel% neq 0 (
+    echo   [FAIL] Could not record the mode in mode.json.
+    pause
+    exit /b 1
+)
+
+:: ----------------------------------------------------------------------------
+:: Pre-download AI models. download_models.py reads the mode just recorded: the
+:: speech model always, the translation model only for translation.
+:: ----------------------------------------------------------------------------
+echo.
+if "!MODE!"=="translation" (
+    echo   Downloading AI models - about 16 GB, one-time download...
+) else (
+    echo   Downloading the speech model - about 2.5 GB, one-time download...
+)
 echo   This will take several minutes depending on your internet speed.
 echo.
 
 "%SCRIPT_DIR%venv\Scripts\python.exe" "%SCRIPT_DIR%download_models.py" 2>&1
 if %errorlevel% equ 0 (
-    echo   [OK] All models downloaded
+    echo   [OK] Models downloaded
 ) else (
-    echo   [WARN] Model download failed. Models will download on first server start.
+    echo   [WARN] Model download failed. Run setup.bat again with an internet
+    echo          connection before the first service - OpenEar will not download
+    echo          the translation model itself, and fetching the speech model at
+    echo          first start can take longer than OpenEar waits.
 )
 
 :: ----------------------------------------------------------------------------
 :: Remote management tools (optional, --remote flag)
 :: ----------------------------------------------------------------------------
-if /i not "%1"=="--remote" goto remote_done
+if not "!REMOTE!"=="1" goto remote_done
 
 echo.
 echo   ============================================
@@ -269,7 +433,7 @@ if %errorlevel% equ 0 (
 ) else (
     echo   Installing Git...
     winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements >nul 2>&1
-    if %errorlevel% equ 0 (
+    if !errorlevel! equ 0 (
         echo   [OK] Git installed
     ) else (
         echo   [WARN] Git install failed. Install manually from https://git-scm.com
@@ -284,7 +448,7 @@ if %errorlevel% equ 0 (
     echo   Installing Tailscale...
     curl -L -o "%TEMP%\tailscale.msi" "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" >nul 2>&1
     msiexec /i "%TEMP%\tailscale.msi" /quiet /norestart >nul 2>&1
-    if %errorlevel% equ 0 (
+    if !errorlevel! equ 0 (
         echo   [OK] Tailscale installed
         echo   NOTE: Open Tailscale from the Start menu and sign in to activate.
         echo   NOTE: After signing in, from your Tailscale admin console:
@@ -303,7 +467,7 @@ if %errorlevel% equ 0 (
 ) else (
     echo   Enabling OpenSSH Server...
     powershell -Command "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0" >nul 2>&1
-    if %errorlevel% equ 0 (
+    if !errorlevel! equ 0 (
         echo   [OK] OpenSSH Server installed
     ) else (
         echo   [WARN] OpenSSH Server install failed.
@@ -358,7 +522,7 @@ if %errorlevel% equ 0 (
 netsh advfirewall firewall show rule name="Remote Desktop" >nul 2>&1
 if %errorlevel% neq 0 (
     netsh advfirewall firewall add rule name="Remote Desktop" dir=in action=allow protocol=TCP localport=3389 >nul 2>&1
-    echo   [OK] RDP firewall rule added (port 3389)
+    echo   [OK] RDP firewall rule added ^(port 3389^)
 ) else (
     echo   [OK] RDP firewall rule already exists
 )
@@ -370,8 +534,19 @@ if %errorlevel% neq 0 (
 :: ----------------------------------------------------------------------------
 echo.
 echo   ============================================
-echo     OpenEar setup complete!
+echo     OpenEar setup complete
 echo   ============================================
+echo.
+if "!MODE!"=="translation" (
+    echo   This PC is set up for: captions plus translation
+    echo   Choose languages on the admin page.
+) else (
+    echo   This PC is set up for: captions only
+)
+echo   To change that, run setup.bat again.
+echo.
+echo   If OpenEar is already running, restart it so the change takes
+echo   effect:  openear.bat restart
 echo.
 echo   To start OpenEar:
 echo     openear.bat start

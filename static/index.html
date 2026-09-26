@@ -316,6 +316,10 @@ let isCapturing = false;        // Whether the server is actively transcribing
 let reconnectTimeout = null;    // Timer handle for auto-reconnect
 let autoScroll = true;          // Whether to auto-scroll as new text arrives
 let selectedLang = localStorage.getItem('openear-lang') || 'en';
+
+/** The language this phone's reader chose, as saved - which can differ from the
+ *  one being shown, after a fallback to English. */
+function savedLang() { return localStorage.getItem('openear-lang') || 'en'; }
 let wakeLock = null;            // Screen Wake Lock — keeps phone screen on while connected
 
 async function requestWakeLock() {
@@ -412,8 +416,10 @@ function connect() {
     serverDownBanner.classList.remove('visible');
     requestWakeLock();
     // Tell the server our language preference right away
-    if (selectedLang !== 'en') {
-      ws.send(JSON.stringify({ type: 'set_language', lang: selectedLang }));
+    // The SAVED choice, not selectedLang: after a fallback, selectedLang is 'en'
+    // and the reader's own language would never be asked for again.
+    if (savedLang() !== 'en') {
+      ws.send(JSON.stringify({ type: 'set_language', lang: savedLang() }));
     }
   };
 
@@ -536,13 +542,29 @@ function populateLanguages(languages) {
     opt.textContent = lang.name;
     langSelect.appendChild(opt);
   });
-  // Restore saved selection (if the language is still available)
-  if (languages.some(l => l.code === selectedLang)) {
-    langSelect.value = selectedLang;
+  // Restore the SAVED selection if it is offered. It is read from localStorage,
+  // not selectedLang, so a language that was unavailable once (a captions-only
+  // start, a language the admin had switched off) comes back by itself as soon as
+  // it is offered again - on the next reconnect, with no page reload.
+  const pref = savedLang();
+  if (languages.some(l => l.code === pref)) {
+    langSelect.value = pref;
+    selectedLang = pref;
   } else {
     langSelect.value = 'en';
     selectedLang = 'en';
+    // localStorage is deliberately left alone, so the saved choice comes back
+    // on its own if that language is offered again later.
+    // onopen already asked the server for the SAVED language, before this list
+    // arrived. Tell it about the fallback too, or the server keeps serving the
+    // old choice while this page shows English.
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set_language', lang: 'en' }));
+    }
   }
+  // A menu with one entry is not a choice. On a captions-only PC, or when the
+  // admin has enabled no other language, hide it rather than offer English alone.
+  langSelect.style.display = languages.length > 1 ? '' : 'none';
 }
 
 langSelect.addEventListener('change', () => {
