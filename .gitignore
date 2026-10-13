@@ -263,6 +263,7 @@ STATE.md
 core_principles.md
 # The bug tracker is private: kept on disk, never in the repo
 /docs/bugs.json
+/docs/bugs-history.json
 
 # The workshop is not tracked in a public repo.
 # A bench is an internal tool and it reads the private layer — the tracker bench

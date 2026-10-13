@@ -16,6 +16,13 @@ of the work.
 
 ---
 
+## 0.12.1 — The QR code works on Android phones
+
+- **The admin page's QR code now points at the server's IP address** instead of its
+  `.local` name. Many Android phones cannot open `.local` addresses, so the code
+  worked on iPhones and failed on Android. The address is read fresh every time the
+  admin page loads.
+
 ## 0.12.0 — Captions only, or captions plus translation, chosen at setup
 
 Most churches want captions, and until now they could not have captions without the

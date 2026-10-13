@@ -44,7 +44,7 @@ A launch flag, --captions-only or --translation, overrides the file for one run.
   index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.12.0"
+VERSION = "0.12.1"
 
 import os
 import sys
@@ -1166,7 +1166,7 @@ async def disable_language(body: dict):
 
 @app.get("/api/server-info")
 async def server_info():
-    """Return server hostname, LAN IP, and the .local URL for QR code generation.
+    """Return server hostname, LAN IP, and the URL the admin page's QR code points at.
 
     The IP detection uses a UDP socket trick: we "connect" to a public IP
     (8.8.8.8 / Google DNS) without actually sending any data. The OS picks
@@ -1175,9 +1175,12 @@ async def server_info():
     Docker or WSL virtual adapters are present (which would otherwise get
     picked by gethostbyname).
 
-    The .local URL uses mDNS (Bonjour) — iOS, macOS, and most modern systems
-    resolve these automatically. This means users can type a friendly hostname
-    instead of an IP address.
+    The QR code points at the IP, not at hostname.local. Many Android phones cannot
+    resolve .local (mDNS) names, so a .local QR code works on iPhones and computers
+    and fails on Android. Nobody types the address - they scan it - so the friendly
+    name bought nothing. The page re-reads the IP at every load, so a router handing
+    out a new address after a reboot is picked up. .local is only the fallback when
+    no IP can be found. @decision:gold 2026-10-13 · BUG-010
     """
     hostname = socket.gethostname()
     ip = "unknown"
@@ -1194,7 +1197,8 @@ async def server_info():
     return {
         "hostname": hostname,
         "ip": ip,
-        "url": f"http://{hostname.lower()}.local",
+        "url": f"http://{ip if ip != 'unknown' else hostname.lower() + '.local'}"
+               + ("" if PORT == 80 else f":{PORT}"),
         "port": PORT,
     }
 
