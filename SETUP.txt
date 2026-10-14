@@ -159,7 +159,7 @@ Any phone, tablet, or computer on the same WiFi network can view captions.
 
 1. On the admin page, scan the QR code with a phone, OR
 2. Type the URL shown on the admin page into any browser
-   (usually http://COMPUTERNAME.local)
+   (the computer's IP address, like http://192.168.1.23)
 
 Your browser may show a "not secure" warning. This is normal and
 expected. OpenEar runs entirely on your local network — no data leaves
@@ -190,6 +190,33 @@ All commands are run from a Command Prompt in the OpenEar folder.
 Whether this PC runs captions only or captions plus translation is set by
 setup.bat, and the admin page shows which, under Status. To change it, run
 setup.bat again.
+
+
+============================================================================
+  Updating OpenEar
+============================================================================
+
+1. Stop the server:
+     openear.bat stop
+2. Get the new version:
+     git pull
+3. Right-click "setup.bat" and click "Run as administrator". It brings
+   the installed packages in line with the new version, and asks the
+   captions-or-translation question again.
+
+   IMPORTANT: an install from before version 0.12 has no answer
+   recorded, so the default is captions only. If you use translation,
+   answer "y".
+
+4. Start the server:
+     openear.bat start
+
+If "git pull" says "refusing to merge unrelated histories", or you
+downloaded OpenEar as a zip instead of using git: stop the server,
+rename the old OpenEar folder, put a fresh copy where it was, and run
+setup.bat in the new folder. To skip the translation model's 13GB
+download, move the "models" folder from the old folder into the new one
+first. The speech model is reused automatically.
 
 
 ============================================================================
@@ -277,15 +304,13 @@ something nobody needs to read.
   → If still missing, restart the server: openear.bat restart
 
 Clients can't connect from other devices
-  → Make sure all devices are on the same WiFi network
-  → Try using the IP address instead of the hostname
-    (shown on the admin page under "Server IP")
+  → Make sure all devices are on the same WiFi network. A guest
+    network is often kept apart from the rest of the building.
   → The setup script adds a firewall rule automatically. If you
     skipped setup.bat or it failed, run it again as Administrator.
-
-iOS says "server can't be found"
-  → Use http://COMPUTERNAME.local (with .local suffix)
-  → mDNS/Bonjour is built into iOS and resolves .local addresses
+  → Antivirus that brings its own firewall (Norton, McAfee and
+    similar) can block OpenEar even when Windows' firewall allows it.
+    Allow OpenEar in it, or uninstall it and use Windows Security.
 
 Browser shows "not secure" or "connection is not private"
   → This is normal. OpenEar runs on HTTP over your local network.

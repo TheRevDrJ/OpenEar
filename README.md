@@ -124,6 +124,15 @@ That's it. The setup script handles everything else.
 
 > **Note:** OpenEar runs on port 80 (standard HTTP) so users don't need to remember a port number. Your browser may show a "not secure" warning — this is normal. Everything runs on your local network. No data leaves the building.
 
+### Updating
+
+1. Stop the server: `openear.bat stop`
+2. Get the new version: `git pull`
+3. Right-click `setup.bat` → **Run as administrator**. It brings the installed packages in line with the new version and asks the captions-or-translation question again. **An install from before 0.12 has no answer recorded, so it defaults to captions only — answer `y` if you use translation.**
+4. Start the server: `openear.bat start`
+
+If `git pull` refuses with *"refusing to merge unrelated histories"*, or you downloaded OpenEar as a zip rather than cloning it: stop the server, rename the old folder, put a fresh copy where it was, and run `setup.bat` in the new folder. To skip the translation model's 13 GB download, move the old folder's `models` folder into the new one first. The speech model is reused automatically.
+
 ### How long captions take to appear
 
 Captions arrive a phrase at a time. OpenEar listens until the speaker pauses — or for ten seconds at most — then transcribes the whole phrase at once, because the speech model needs a complete phrase to get the words, capitals and punctuation right. Shorter phrases were measured and made captions noticeably less accurate (14.4% of words wrong at three seconds, against 4.1% at five), so the length is deliberate.
