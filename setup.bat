@@ -341,7 +341,11 @@ echo.
 echo   Installing Python packages (this may take several minutes)...
 echo.
 
-"%SCRIPT_DIR%venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%requirements.txt" --quiet
+:: Through the venv's python.exe, never pip.exe: Windows 11 Smart App Control
+:: blocks unsigned programs, and pip.exe is an unsigned launcher while python.exe
+:: is signed. On a new laptop with it on, pip.exe fails "blocked by your
+:: organization's Device Guard policy" and setup stops here.
+"%SCRIPT_DIR%venv\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%requirements.txt" --quiet
 if %errorlevel% neq 0 (
     echo   [FAIL] Package installation failed.
     pause
