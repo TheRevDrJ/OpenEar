@@ -10,15 +10,26 @@ set "SCRIPT_DIR=%~dp0"
 :: Installs all dependencies and configures Windows for OpenEar.
 :: Must be run as Administrator (for firewall rule and long paths).
 ::
-:: It asks ONE question: captions only, or captions plus translation. The answer
-:: is recorded in mode.json (openear_config.py owns that file) and read at every
-:: server start. Run this script again at any time to change it.
+:: It asks, before installing anything:
+::   - captions only, or captions plus translation. Recorded in mode.json
+::     (openear_config.py owns that file), read at every server start. Run this
+::     script again at any time to change it.
+::   - on a FIRST install only: shortcuts in the Start menu? on the desktop?
+::     Each is an "OpenEar" folder of four (install_shortcuts.ps1). A re-run -
+::     the update steps run setup again - never asks and never creates or
+::     deletes a shortcut: whatever is there, someone chose.
+:: Then it shows the answers and asks to continue; "n" asks everything again.
+:: Pressing Enter takes the default shown, so it also runs with no keyboard.
+:: @decision:gold 2026-11-11 - the shortcut questions, their folder, the
+:: first-install-only rule, and the recap.
 ::
 ::   setup.bat                   asks. Pressing Enter keeps this machine's
 ::                               current mode, or picks captions only on a
 ::                               first install.
 ::   setup.bat --captions-only   no question: captions only
 ::   setup.bat --translation     no question: captions plus translation
+::   setup.bat --shortcuts       no question: both shortcut folders, even on a re-run
+::   setup.bat --no-shortcuts    no question: no shortcuts
 ::   setup.bat --remote          also installs remote-management tools
 ::
 :: Captions only is the default because it is the one that cannot hurt the PC it
@@ -45,18 +56,33 @@ echo.
 :: ----------------------------------------------------------------------------
 set "REMOTE=0"
 set "MODE_ARG="
+set "SHORTCUTS_ARG="
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="--remote" goto arg_remote
 if /i "%~1"=="--captions-only" goto arg_captions
 if /i "%~1"=="--translation" goto arg_translation
+if /i "%~1"=="--shortcuts" goto arg_shortcuts
+if /i "%~1"=="--no-shortcuts" goto arg_no_shortcuts
 echo   ERROR: Unknown option: %~1
-echo   Options: --captions-only   --translation   --remote
+echo   Options: --captions-only   --translation   --shortcuts   --no-shortcuts   --remote
 echo.
 exit /b 2
 :arg_remote
 set "REMOTE=1"
 goto next_arg
+:arg_shortcuts
+if "!SHORTCUTS_ARG!"=="no" goto arg_shortcut_conflict
+set "SHORTCUTS_ARG=yes"
+goto next_arg
+:arg_no_shortcuts
+if "!SHORTCUTS_ARG!"=="yes" goto arg_shortcut_conflict
+set "SHORTCUTS_ARG=no"
+goto next_arg
+:arg_shortcut_conflict
+echo   ERROR: --shortcuts and --no-shortcuts cannot be used together.
+echo.
+exit /b 2
 :arg_captions
 if "!MODE_ARG!"=="translation" goto arg_conflict
 set "MODE_ARG=captions"
@@ -143,6 +169,11 @@ echo   [OK] pip available
 set "CURRENT_MODE=none"
 for /f "delims=" %%m in ('python "%SCRIPT_DIR%openear_config.py" --current 2^>nul') do set "CURRENT_MODE=%%m"
 
+:: The questions start here, and answering "n" at the recap comes back here.
+:: ASKED records whether anyone was actually asked anything: when every answer
+:: came from a flag, "n" cancels instead of looping over nothing.
+:questions
+set "ASKED=0"
 echo.
 echo   ============================================
 echo     Captions only, or captions plus translation?
@@ -183,6 +214,7 @@ if "!DEFAULT_MODE!"=="translation" set "PROMPT_HINT=Y/n"
 :: reads nothing - no keyboard, or a script piping in no input - so without this
 :: it would keep a stale value, or one inherited from the environment.
 set "ANSWER="
+set "ASKED=1"
 set /p ANSWER="   Add translation? [!PROMPT_HINT!]: "
 set "MODE=!DEFAULT_MODE!"
 if "!ANSWER!"=="" goto mode_answered
@@ -217,6 +249,7 @@ if defined MODE_ARG (
     exit /b 1
 )
 set "ANSWER="
+set "ASKED=1"
 set /p ANSWER="   Set up captions only for now instead? [Y/n]: "
 if /i "!ANSWER!"=="n" goto cancel_setup
 if /i "!ANSWER!"=="no" goto cancel_setup
@@ -229,6 +262,88 @@ echo.
 pause
 exit /b 1
 :mode_final
+
+:: ----------------------------------------------------------------------------
+:: Shortcuts: an "OpenEar" folder of Start, Stop, Restart and Admin, in the
+:: Start menu and/or on the desktop (install_shortcuts.ps1 makes them).
+:: Asked on a FIRST install only - no mode.json yet. A re-run is the update path,
+:: and it leaves shortcuts exactly as they are, including ones removed on purpose.
+:: ----------------------------------------------------------------------------
+set "SC_STARTMENU=0"
+set "SC_DESKTOP=0"
+set "SC_KEEP=0"
+if "!SHORTCUTS_ARG!"=="no" goto shortcuts_decided
+if "!SHORTCUTS_ARG!"=="yes" goto shortcuts_both
+if not "!CURRENT_MODE!"=="none" goto shortcuts_keep
+echo.
+echo   Shortcuts: an OpenEar folder with Start, Stop, Restart and Admin.
+echo.
+:ask_startmenu
+set "ANSWER="
+set "ASKED=1"
+set /p ANSWER="   Add them to the Start menu? [Y/n]: "
+if "!ANSWER!"=="" goto startmenu_yes
+if /i "!ANSWER!"=="y" goto startmenu_yes
+if /i "!ANSWER!"=="yes" goto startmenu_yes
+if /i "!ANSWER!"=="n" goto ask_desktop
+if /i "!ANSWER!"=="no" goto ask_desktop
+echo   Please answer y or n.
+goto ask_startmenu
+:startmenu_yes
+set "SC_STARTMENU=1"
+:ask_desktop
+set "ANSWER="
+set /p ANSWER="   Add them to the desktop? [Y/n]: "
+if "!ANSWER!"=="" goto desktop_yes
+if /i "!ANSWER!"=="y" goto desktop_yes
+if /i "!ANSWER!"=="yes" goto desktop_yes
+if /i "!ANSWER!"=="n" goto shortcuts_decided
+if /i "!ANSWER!"=="no" goto shortcuts_decided
+echo   Please answer y or n.
+goto ask_desktop
+:desktop_yes
+set "SC_DESKTOP=1"
+goto shortcuts_decided
+:shortcuts_both
+set "SC_STARTMENU=1"
+set "SC_DESKTOP=1"
+goto shortcuts_decided
+:shortcuts_keep
+set "SC_KEEP=1"
+:shortcuts_decided
+
+:: ----------------------------------------------------------------------------
+:: The answers, once more, before anything is installed. "n" asks everything
+:: again - or cancels, when nothing was asked (every answer came from a flag).
+:: ----------------------------------------------------------------------------
+echo.
+echo   ============================================
+echo     Ready to install
+echo   ============================================
+echo.
+if "!MODE!"=="translation" echo   Mode:         captions plus translation
+if not "!MODE!"=="translation" echo   Mode:         captions only
+if "!SC_KEEP!"=="1" echo   Shortcuts:    left as they are
+if "!SC_KEEP!"=="0" if "!SC_STARTMENU!"=="1" echo   Start menu:   OpenEar folder of shortcuts
+if "!SC_KEEP!"=="0" if "!SC_STARTMENU!"=="0" echo   Start menu:   no shortcuts
+if "!SC_KEEP!"=="0" if "!SC_DESKTOP!"=="1" echo   Desktop:      OpenEar folder of shortcuts
+if "!SC_KEEP!"=="0" if "!SC_DESKTOP!"=="0" echo   Desktop:      no shortcuts
+echo.
+:ask_continue
+set "ANSWER="
+set /p ANSWER="   Continue? [Y/n]: "
+if "!ANSWER!"=="" goto answers_confirmed
+if /i "!ANSWER!"=="y" goto answers_confirmed
+if /i "!ANSWER!"=="yes" goto answers_confirmed
+if /i "!ANSWER!"=="n" goto answers_rejected
+if /i "!ANSWER!"=="no" goto answers_rejected
+echo   Please answer y or n.
+goto ask_continue
+:answers_rejected
+if "!ASKED!"=="1" goto questions
+goto cancel_setup
+:answers_confirmed
+echo.
 
 if "!MODE!"=="translation" (
     echo   [OK] Setting up: captions plus translation
@@ -420,6 +535,18 @@ if %errorlevel% equ 0 (
 )
 
 :: ----------------------------------------------------------------------------
+:: Shortcuts, as answered at the start.
+:: ----------------------------------------------------------------------------
+if "!SC_STARTMENU!!SC_DESKTOP!"=="00" goto shortcuts_done
+echo.
+echo   Adding shortcuts...
+set "SC_ARGS="
+if "!SC_STARTMENU!"=="1" set "SC_ARGS=!SC_ARGS! -StartMenu"
+if "!SC_DESKTOP!"=="1" set "SC_ARGS=!SC_ARGS! -Desktop"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install_shortcuts.ps1" !SC_ARGS!
+:shortcuts_done
+
+:: ----------------------------------------------------------------------------
 :: Remote management tools (optional, --remote flag)
 :: ----------------------------------------------------------------------------
 if not "!REMOTE!"=="1" goto remote_done
@@ -552,6 +679,8 @@ echo.
 echo   If OpenEar is already running, restart it so the change takes
 echo   effect:  openear.bat restart
 echo.
+if "!SC_STARTMENU!"=="1" echo   Shortcuts:   an OpenEar folder in the Start menu
+if "!SC_DESKTOP!"=="1" echo   Shortcuts:   an OpenEar folder on the desktop
 echo   To start OpenEar:
 echo     openear.bat start
 echo.
