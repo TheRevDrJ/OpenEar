@@ -44,7 +44,7 @@ A launch flag, --captions-only or --translation, overrides the file for one run.
   index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 
 import os
 import sys
@@ -263,26 +263,18 @@ def load_translation_model():
         import ctranslate2
         import sentencepiece as spm
 
-        # Check the FILES, not just the folder: an interrupted download leaves the
-        # folder in place with model.bin missing, and a folder check trusts it.
+        # The completeness check (files AND model.bin's pinned size) lives in
+        # openear_config, shared with download_models.py.
         #
-        # ⛔ AND NEVER DOWNLOAD HERE. This runs before the server opens port 80, so
+        # ⛔ NEVER DOWNLOAD HERE. This runs before the server opens port 80, so
         # fetching the 13 GB model at startup keeps CAPTIONS down for the whole
         # download - openear.bat gives up after three minutes, and starting again
         # kills the process mid-download. Captions must always come up fast; a
         # missing model is reported at once, and setup.bat (which resumes an
         # interrupted download) is where it gets fetched.
-        missing = [f for f in NLLB_REQUIRED_FILES if not (Path(NLLB_MODEL_DIR) / f).is_file()]
-        if missing:
-            raise FileNotFoundError(f"translation model files missing: {', '.join(missing)}")
-        # Present is not complete: a copy cut short, or a disk that filled, leaves a
-        # short model.bin that CTranslate2 rejects with an error naming neither
-        # cause. Its size is pinned with the revision, so it can be checked here.
-        size = (Path(NLLB_MODEL_DIR) / "model.bin").stat().st_size
-        if size != openear_config.NLLB_MODEL_BIN_BYTES:
-            raise FileNotFoundError(
-                f"translation model file incomplete: model.bin is {size:,} bytes, "
-                f"expected {openear_config.NLLB_MODEL_BIN_BYTES:,}")
+        problem = openear_config.translation_model_problem(NLLB_MODEL_DIR)
+        if problem:
+            raise FileNotFoundError(problem)
 
         nllb_translator = ctranslate2.Translator(
             NLLB_MODEL_DIR,
@@ -297,11 +289,6 @@ def load_translation_model():
         translation_unavailable_reason = f"Captions are running in English. {translation_failure_hint(e)} The error was: {e}"
         logger.error(f"NLLB translation model unavailable: {e}")
         logger.error("Translation is OFF for this session. Captions continue in English only.")
-
-
-# The files a usable NLLB-200 CTranslate2 folder must hold. model.bin is 13 GB and
-# the one an interrupted download most often lacks.
-NLLB_REQUIRED_FILES = ("model.bin", "config.json", "shared_vocabulary.json", "sentencepiece.bpe.model")
 
 
 def translation_failure_hint(e: Exception) -> str:

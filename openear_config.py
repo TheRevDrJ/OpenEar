@@ -87,6 +87,31 @@ NLLB_REVISION = "33acf12b9572e946facdf7f3cb3ebcf47ba52286"  # pinned 2026-05-03
 NLLB_MODEL_BIN_BYTES = 13_387_884_764
 NLLB_MODEL_DIR = INSTALL_DIR / "models" / "nllb-3.3b-ct2"
 
+# The files a usable NLLB-200 CTranslate2 folder must hold. model.bin is 13 GB and
+# the one an interrupted download most often lacks.
+NLLB_REQUIRED_FILES = ("model.bin", "config.json", "shared_vocabulary.json", "sentencepiece.bpe.model")
+
+
+def translation_model_problem(model_dir: Path = NLLB_MODEL_DIR):
+    """Why the translation model on disk is unusable, or None if it is complete.
+
+    Checks FILES, not the folder: an interrupted download leaves the folder in
+    place with model.bin missing. And present is not complete: a copy cut short,
+    or a disk that filled, leaves a short model.bin that CTranslate2 rejects with
+    an error naming neither cause - its size is pinned with the revision.
+    The server refuses to load a model this rejects; the downloader keeps
+    retrying until this accepts.
+    """
+    model_dir = Path(model_dir)
+    missing = [f for f in NLLB_REQUIRED_FILES if not (model_dir / f).is_file()]
+    if missing:
+        return f"translation model files missing: {', '.join(missing)}"
+    size = (model_dir / "model.bin").stat().st_size
+    if size != NLLB_MODEL_BIN_BYTES:
+        return (f"translation model file incomplete: model.bin is {size:,} bytes, "
+                f"expected {NLLB_MODEL_BIN_BYTES:,}")
+    return None
+
 
 class ModeError(Exception):
     """A mode request that cannot be honoured, such as both flags at once."""
