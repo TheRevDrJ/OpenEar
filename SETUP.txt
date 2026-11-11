@@ -104,7 +104,7 @@ It must be run as Administrator.
 4. Click "Run as administrator"
 5. If Windows asks "Do you want to allow this app to make changes?"
    click "Yes"
-6. Answer the one question setup asks: captions only, or captions plus
+6. Answer setup's questions. First: captions only, or captions plus
    translation.
 
      Captions only        English captions on every phone. No graphics
@@ -118,6 +118,13 @@ It must be run as Administrator.
                           share with streaming or video software.
 
    You can change your answer at any time by running setup.bat again.
+
+   Then, on a first install: do you want shortcuts in the Start menu, and
+   on the desktop? Each is an "OpenEar" folder holding Start OpenEar,
+   Stop OpenEar, Restart OpenEar and OpenEar Admin. Press Enter for yes.
+
+   Setup then lists your answers and asks "Continue?". Answer n to go
+   through the questions again. Nothing is installed until you say yes.
 
 7. Wait for the setup to complete (15-30 minutes depending on internet
    speed — the AI models are about 2.5GB for captions only, 16GB with
@@ -133,6 +140,13 @@ packages require.
 ============================================================================
   STEP 5: Start OpenEar
 ============================================================================
+
+If you added shortcuts, open the OpenEar folder on the desktop or in the
+Start menu and double-click "Start OpenEar". A window shows OpenEar loading,
+then that it is running; press any key to close it. OpenEar keeps running.
+Use "Restart OpenEar" after plugging in or changing a microphone.
+
+Without shortcuts:
 
 1. Open a Command Prompt
 2. Navigate to the OpenEar folder:
