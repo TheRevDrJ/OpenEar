@@ -16,6 +16,29 @@ of the work.
 
 ---
 
+## 0.13.0 — Start OpenEar from a shortcut, and a setup that installs on new Windows 11 PCs
+
+A volunteer should be able to run OpenEar without typing commands, and setup should
+work on the PC a church actually has, which these days is often a new Windows 11 laptop.
+
+- **Setup offers shortcuts on a first install.** It asks whether to put an `OpenEar`
+  folder in the Start menu, on the desktop, or both. The folder holds **Start OpenEar**,
+  **Stop OpenEar**, **Restart OpenEar** and **OpenEar Admin**. Start, Stop and Restart
+  open a window that shows the result and waits for a key. Closing it leaves OpenEar
+  running. Restart is how a microphone plugged in after starting shows up. Running
+  setup again to update never creates or removes shortcuts. OpenEar never starts
+  itself with Windows.
+- **Setup confirms before it installs anything.** It lists every answer and asks
+  `Continue?`. Answer `n` to go through the questions again.
+- **Setup installs with Windows 11 Smart App Control turned on** (0.12.2). Packages are
+  installed through Python's own signed program instead of an unsigned helper that
+  Smart App Control blocks. Nobody has to turn the protection off.
+- **Model downloads wait and retry when Hugging Face throttles them** (0.12.3). An
+  anonymous download can be refused with "Too Many Requests". Setup now waits, up to
+  about 24 minutes across several tries, and resumes where it left off. It counts the
+  translation model as finished only when the server's own completeness check accepts
+  it. A permanent refusal (a missing file, access denied) still stops immediately.
+
 ## 0.12.1 — The QR code works on Android phones
 
 - **The admin page's QR code now points at the server's IP address** instead of its

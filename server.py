@@ -44,7 +44,7 @@ A launch flag, --captions-only or --translation, overrides the file for one run.
   index.html  — the congregant view; WebSocket in, text out.
 """
 
-VERSION = "0.12.3"
+VERSION = "0.13.0"
 
 import os
 import sys
